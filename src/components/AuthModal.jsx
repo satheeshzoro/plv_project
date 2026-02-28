@@ -1,0 +1,278 @@
+import { useState } from "react";
+import { X, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { useAppData } from "@/context/AppDataContext";
+
+const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
+  const { toast } = useToast();
+  const { checkAuth } = useAppData();
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
+
+  if (!isOpen) return null;
+
+  const isSignUp = mode === "signup";
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+      
+      // 1. Fetch CSRF Token FIRST
+      const csrfResponse = await fetch(`${backendUrl}/api/csrf/`, { credentials: "include" });
+      const csrfData = await csrfResponse.json();
+      const csrfToken = csrfData.csrfToken;
+      
+      if (csrfToken) {
+        localStorage.setItem("csrfToken", csrfToken);
+      }
+
+      if (isSignUp) {
+        const response = await fetch(`${backendUrl}/api/register/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken || "",
+          },
+          body: JSON.stringify({
+            email: formData.email,
+            full_name: formData.name,
+            password: formData.password,
+          }),
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || "Registration failed");
+        }
+
+        toast({
+          title: "Account Created!",
+          description: "Your account has been created successfully. Please sign in.",
+        });
+        
+        onSwitchMode();
+      } else {
+        // Real Login Logic
+        const response = await fetch(`${backendUrl}/api/login/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken || "",
+          },
+          body: JSON.stringify({
+            email: formData.email,
+            password: formData.password,
+          }),
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || "Login failed. Please check your credentials.");
+        }
+
+        const data = await response.json();
+
+        // REFRESH CSRF TOKEN: Session ID changed after login, so we need the new token
+        try {
+          const refreshCsrf = await fetch(`${backendUrl}/api/csrf/`, { credentials: "include" });
+          if (refreshCsrf.ok) {
+            const refreshData = await refreshCsrf.json();
+            if (refreshData.csrfToken) {
+              localStorage.setItem("csrfToken", refreshData.csrfToken);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to refresh CSRF token after login", e);
+        }
+
+        toast({
+          title: "Welcome Back!",
+          description: "You have been signed in successfully.",
+        });
+        
+        await checkAuth();
+        
+        // Pass user data to parent (handle variations in API response fields)
+        const userData = { ...data, username: data.full_name || data.name || data.username || formData.email.split('@')[0] };
+        onSuccess(userData);
+        onClose();
+      }
+    } catch (error) {
+      console.error("Authentication error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleChange = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-foreground/20 backdrop-blur-sm animate-fade-in"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="relative w-full max-w-md surface-elevated rounded-2xl shadow-soft-lg p-6 md:p-8 animate-slide-up border border-border/50">
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-smooth"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {/* Header */}
+        <div className="text-center mb-8">
+          <span className="font-serif text-3xl font-bold text-primary">AJ</span>
+          <h2 className="font-serif text-2xl font-bold text-heading mt-4 mb-2">
+            {isSignUp ? "Create Your Account" : "Welcome Back"}
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            {isSignUp
+              ? "Join our community of researchers and scholars"
+              : "Sign in to continue to QUILIVE"}
+          </p>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {isSignUp && (
+            <div className="space-y-2">
+              <label htmlFor="name" className="block text-sm font-medium text-foreground">
+                Full Name
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={formData.name}
+                  onChange={(e) => handleChange("name", e.target.value)}
+                  className="pl-10 bg-background border-border"
+                  required
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <label htmlFor="email" className="block text-sm font-medium text-foreground">
+              Email Address
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <Input
+                id="email"
+                type="email"
+                placeholder="Enter your email"
+                value={formData.email}
+                onChange={(e) => handleChange("email", e.target.value)}
+                className="pl-10 bg-background border-border"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="password" className="block text-sm font-medium text-foreground">
+              Password
+            </label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder={isSignUp ? "Create a password" : "Enter your password"}
+                value={formData.password}
+                onChange={(e) => handleChange("password", e.target.value)}
+                className="pl-10 pr-10 bg-background border-border"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-smooth"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+
+          {!isSignUp && (
+            <div className="text-right">
+              <a href="#" className="text-sm text-primary hover:text-accent transition-smooth">
+                Forgot password?
+              </a>
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            size="lg"
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <span className="flex items-center gap-2">
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                {isSignUp ? "Creating Account..." : "Signing In..."}
+              </span>
+            ) : (
+              isSignUp ? "Create Account" : "Sign In"
+            )}
+          </Button>
+        </form>
+
+        {/* Divider */}
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-border" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-4 bg-card text-muted-foreground">or</span>
+          </div>
+        </div>
+
+        {/* Switch Mode */}
+        <p className="text-center text-sm text-muted-foreground">
+          {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+          <button
+            type="button"
+            onClick={onSwitchMode}
+            className="font-medium text-primary hover:text-accent transition-smooth"
+          >
+            {isSignUp ? "Sign In" : "Sign Up"}
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default AuthModal;
