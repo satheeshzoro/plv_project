@@ -34,7 +34,9 @@ from .views import (
 from .views import (
     EditorListCreateAPIView,
     EditorTasksAPIView,
+    UpdateEditorCategoryAPIView,
     UserListAPIView,
+    PromoteUserToEditorAPIView,
 )
 
 from .views import (
@@ -85,12 +87,14 @@ urlpatterns = [
     # ===================== EDITORS =====================
     # Admin: list + create editors
     path("editors/", EditorListCreateAPIView.as_view(), name="editors"),
+    path("editors/<int:pk>/category/", UpdateEditorCategoryAPIView.as_view(), name="editor-category"),
 
     # Editor dashboard tasks
     path("editor/tasks/", EditorTasksAPIView.as_view(), name="editor-tasks"),
 
     # ===================== USERS =====================
     path("users/", UserListAPIView.as_view(), name="user-list"),
+    path("users/<int:pk>/promote-editor/", PromoteUserToEditorAPIView.as_view(), name="promote-user-to-editor"),
 
     # ===================== SITE SETTINGS =====================
     path("settings/", SiteSettingsAPIView.as_view(), name="site-settings"),

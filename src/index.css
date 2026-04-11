@@ -13,42 +13,43 @@
 
 @layer base {
   :root {
-    --background: 210 20% 99%;
-    --foreground: 215 25% 15%;
+    --background: 42 33% 97%;
+    --foreground: 188 34% 16%;
 
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 15%;
+    --card-foreground: 188 34% 16%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 15%;
+    --popover-foreground: 188 34% 16%;
 
-    --primary: 217 71% 45%;
+    --primary: 184 39% 30%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 215 20% 95%;
-    --secondary-foreground: 215 25% 25%;
+    --secondary: 42 42% 92%;
+    --secondary-foreground: 188 28% 24%;
 
-    --muted: 215 15% 92%;
-    --muted-foreground: 215 15% 45%;
+    --muted: 42 28% 90%;
+    --muted-foreground: 188 16% 40%;
 
-    --accent: 217 91% 55%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 32 61% 56%;
+    --accent-foreground: 188 34% 14%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 215 20% 88%;
-    --input: 215 20% 88%;
-    --ring: 217 71% 45%;
+    --border: 38 27% 82%;
+    --input: 38 27% 82%;
+    --ring: 184 39% 30%;
 
-    --radius: 0.5rem;
+    --radius: 0.9rem;
 
-    /* Custom tokens */
-    --heading-color: 215 30% 12%;
-    --link-color: 217 71% 45%;
-    --link-hover: 217 80% 38%;
-    --surface-elevated: 0 0% 100%;
-    --shadow-soft: 215 30% 70%;
+    --heading-color: 188 42% 14%;
+    --link-color: 184 39% 30%;
+    --link-hover: 184 46% 24%;
+    --surface-elevated: 38 60% 99%;
+    --shadow-soft: 188 24% 28%;
+    --brand-glow: 38 77% 62%;
+    --brand-wash: 184 35% 88%;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -61,39 +62,41 @@
   }
 
   .dark {
-    --background: 215 30% 8%;
-    --foreground: 210 20% 95%;
+    --background: 188 34% 8%;
+    --foreground: 42 38% 94%;
 
-    --card: 215 28% 12%;
-    --card-foreground: 210 20% 95%;
+    --card: 189 28% 12%;
+    --card-foreground: 42 38% 94%;
 
-    --popover: 215 28% 12%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 189 28% 12%;
+    --popover-foreground: 42 38% 94%;
 
-    --primary: 217 80% 60%;
-    --primary-foreground: 215 30% 8%;
+    --primary: 35 63% 62%;
+    --primary-foreground: 188 34% 12%;
 
-    --secondary: 215 25% 18%;
-    --secondary-foreground: 210 15% 85%;
+    --secondary: 186 24% 18%;
+    --secondary-foreground: 42 25% 86%;
 
-    --muted: 215 20% 20%;
-    --muted-foreground: 215 15% 60%;
+    --muted: 188 18% 19%;
+    --muted-foreground: 42 12% 68%;
 
-    --accent: 217 85% 65%;
-    --accent-foreground: 215 30% 8%;
+    --accent: 35 63% 62%;
+    --accent-foreground: 188 34% 12%;
 
     --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 215 20% 22%;
-    --input: 215 20% 22%;
-    --ring: 217 80% 60%;
+    --border: 188 18% 24%;
+    --input: 188 18% 24%;
+    --ring: 35 63% 62%;
 
-    --heading-color: 210 20% 95%;
-    --link-color: 217 80% 65%;
-    --link-hover: 217 85% 75%;
-    --surface-elevated: 215 25% 14%;
-    --shadow-soft: 215 30% 5%;
+    --heading-color: 42 36% 94%;
+    --link-color: 35 63% 68%;
+    --link-hover: 35 70% 75%;
+    --surface-elevated: 188 28% 11%;
+    --shadow-soft: 188 40% 3%;
+    --brand-glow: 35 63% 62%;
+    --brand-wash: 188 30% 18%;
 
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
@@ -114,6 +117,10 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    background-image:
+      radial-gradient(circle at top left, hsl(var(--brand-wash) / 0.45), transparent 28%),
+      radial-gradient(circle at bottom right, hsl(var(--brand-glow) / 0.14), transparent 26%);
+    background-attachment: fixed;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -155,22 +162,145 @@
     box-shadow: 0 8px 30px -6px hsl(var(--shadow-soft) / 0.2);
   }
 
-  /* Smooth transitions */
   .transition-smooth {
     @apply transition-all duration-300 ease-out;
   }
 
-  /* Gradient backgrounds */
   .gradient-hero {
     background: linear-gradient(
       135deg,
       hsl(var(--background)) 0%,
-      hsl(215 25% 96%) 50%,
-      hsl(217 30% 94%) 100%
+      hsl(40 42% 94%) 48%,
+      hsl(183 22% 90%) 100%
     );
   }
 
-  /* Animation keyframes */
+  .app-shell {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .app-shell::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    background:
+      linear-gradient(135deg, hsl(var(--background) / 0.92), hsl(var(--background) / 0.72)),
+      radial-gradient(circle at 15% 15%, hsl(var(--brand-glow) / 0.16), transparent 20%),
+      radial-gradient(circle at 85% 10%, hsl(var(--primary) / 0.12), transparent 24%);
+  }
+
+  .brand-panel {
+    background:
+      linear-gradient(180deg, hsl(var(--card) / 0.97), hsl(var(--card) / 0.9)),
+      radial-gradient(circle at top right, hsl(var(--brand-glow) / 0.08), transparent 24%);
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 24px 60px -32px hsl(var(--shadow-soft) / 0.28);
+  }
+
+  .brand-image-frame {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.75rem;
+    border: 1px solid hsl(var(--border));
+    background:
+      linear-gradient(180deg, hsl(var(--card) / 0.96), hsl(var(--card) / 0.84)),
+      radial-gradient(circle at top left, hsl(var(--brand-glow) / 0.12), transparent 30%);
+    box-shadow: 0 28px 60px -34px hsl(var(--shadow-soft) / 0.28);
+  }
+
+  .brand-image-frame::after {
+    content: "";
+    position: absolute;
+    inset: auto 1.2rem 1.2rem 1.2rem;
+    height: 5rem;
+    border-radius: 1.4rem;
+    background: linear-gradient(180deg, transparent, hsl(var(--background) / 0.72));
+    pointer-events: none;
+  }
+
+  .brand-logo-lockup {
+    @apply flex items-center gap-3;
+  }
+
+  .brand-logo-mark {
+    @apply flex items-center justify-center overflow-hidden rounded-2xl border border-border bg-card;
+    width: 3rem;
+    height: 3rem;
+    box-shadow: 0 16px 30px -22px hsl(var(--shadow-soft) / 0.5);
+  }
+
+  .brand-topbar {
+    background:
+      linear-gradient(180deg, hsl(var(--card) / 0.94), hsl(var(--card) / 0.88)),
+      radial-gradient(circle at top left, hsl(var(--brand-glow) / 0.09), transparent 28%);
+    backdrop-filter: blur(14px);
+  }
+
+  .role-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.75rem;
+    border: 1px solid hsl(var(--border));
+    background:
+      linear-gradient(135deg, rgba(255, 251, 246, 0.98), rgba(234, 243, 241, 0.98)),
+      radial-gradient(circle at top right, hsl(var(--brand-glow) / 0.12), transparent 26%);
+    box-shadow: 0 24px 70px -38px hsl(var(--shadow-soft) / 0.32);
+  }
+
+  .dark .role-hero {
+    background:
+      linear-gradient(135deg, rgba(14, 30, 34, 0.98), rgba(19, 45, 50, 0.98)),
+      radial-gradient(circle at top right, hsl(var(--brand-glow) / 0.14), transparent 28%);
+  }
+
+  .role-hero::before {
+    content: "";
+    position: absolute;
+    inset: auto auto -3rem -3rem;
+    width: 12rem;
+    height: 12rem;
+    border-radius: 999px;
+    background: hsl(var(--brand-glow) / 0.12);
+    filter: blur(14px);
+    pointer-events: none;
+  }
+
+  .dashboard-shell {
+    position: relative;
+    min-height: 100vh;
+    background:
+      linear-gradient(180deg, hsl(var(--background)), hsl(var(--secondary) / 0.35));
+  }
+
+  .dashboard-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 22rem;
+    background:
+      linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(190 31% 22%) 55%, hsl(var(--accent)) 140%);
+    opacity: 0.14;
+    pointer-events: none;
+  }
+
+  .brand-badge {
+    @apply inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium;
+    background: hsl(var(--primary) / 0.1);
+    color: hsl(var(--primary));
+    border: 1px solid hsl(var(--primary) / 0.18);
+  }
+
+  .brand-subtle-grid {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.35) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.35) 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-position: center;
+  }
+
   @keyframes fade-in {
     from {
       opacity: 0;

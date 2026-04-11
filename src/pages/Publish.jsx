@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { Send, Upload, FileText, CheckCircle2, ArrowLeft, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,33 +7,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
+import { extractApiError, normalizeEmail, normalizeText } from "@/lib/api";
+import { ARTICLE_TYPES, JOURNAL_CATEGORY_BY_TITLE, JOURNAL_OPTIONS } from "@/data/journalOptions";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
-const ARTICLE_TYPES = [
-  "Research Paper",
-  "Review Article",
-  "Case Study",
-  "Technical Report",
-  "Short Communication",
-];
-
-const JOURNAL_TYPES = [
-  "Computer Science",
-  "Medical Sciences",
-  "Business & Economics",
-  "Engineering",
-  "Humanities",
-  "Environmental Science",
-  "Biotechnology",
-  "Physics",
-  "Mathematics",
-];
-
 const Publish = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
-  const { addSubmission, currentUser, logoutUser } = useAppData();
+  const { addSubmission, currentUser, logoutUser, isAuthChecking, checkAuth } = useAppData();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [file, setFile] = useState(null);
   const [image, setImage] = useState(null);
@@ -43,12 +26,42 @@ const Publish = () => {
     email: "",
     country: "",
     whatsapp: "",
-    articleType: "",
-    journalType: "",
+    journalName: searchParams.get("journalName") || "",
+    articleType: searchParams.get("articleType") || "",
+    journalType: searchParams.get("journalType") || "",
     wordCount: "",
+    password: "",
   });
 
+  useEffect(() => {
+    if (!currentUser) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      fullName: currentUser.username || currentUser.full_name || prev.fullName,
+      email: currentUser.email || prev.email,
+    }));
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!formData.journalName) return;
+
+    const derivedCategory = JOURNAL_CATEGORY_BY_TITLE[formData.journalName];
+    if (derivedCategory && formData.journalType !== derivedCategory) {
+      setFormData((prev) => ({ ...prev, journalType: derivedCategory }));
+    }
+  }, [formData.journalName, formData.journalType]);
+
   const handleChange = (field, value) => {
+    if (field === "journalName") {
+      setFormData((prev) => ({
+        ...prev,
+        journalName: value,
+        journalType: JOURNAL_CATEGORY_BY_TITLE[value] || "",
+      }));
+      return;
+    }
+
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -71,11 +84,21 @@ const Publish = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validate form
-    if (!formData.fullName || !formData.email || !formData.country || !formData.articleType || !formData.journalType || !formData.wordCount || !file || !image) {
+    if (
+      !formData.fullName ||
+      !formData.email ||
+      !formData.country ||
+      !formData.journalName ||
+      !formData.articleType ||
+      !formData.journalType ||
+      !formData.wordCount ||
+      !file ||
+      !image ||
+      (!currentUser && !formData.password)
+    ) {
       toast({
         title: "Incomplete Form",
-        description: "Please fill in all required fields and upload a PDF.",
+        description: "Please complete all required account and submission fields.",
         variant: "destructive",
       });
       return;
@@ -84,11 +107,87 @@ const Publish = () => {
     setIsSubmitting(true);
 
     try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+      const normalizedForm = {
+        fullName: normalizeText(formData.fullName),
+        email: normalizeEmail(formData.email),
+        country: normalizeText(formData.country),
+        whatsapp: normalizeText(formData.whatsapp),
+        journalName: normalizeText(formData.journalName),
+        password: formData.password,
+      };
+      const csrfResponse = await fetch(`${backendUrl}/api/csrf/`, { credentials: "include" });
+      if (!csrfResponse.ok) {
+        throw new Error("Unable to reach the authentication service. Please try again.");
+      }
+      const csrfData = await csrfResponse.json();
+      const csrfToken = csrfData.csrfToken;
+
+      if (csrfToken) {
+        localStorage.setItem("csrfToken", csrfToken);
+      }
+
+      if (!currentUser) {
+        const registerResponse = await fetch(`${backendUrl}/api/register/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken || "",
+          },
+          body: JSON.stringify({
+            email: normalizedForm.email,
+            full_name: normalizedForm.fullName,
+            password: normalizedForm.password,
+            country: normalizedForm.country,
+            whatsapp: normalizedForm.whatsapp,
+          }),
+          credentials: "include",
+        });
+
+        if (!registerResponse.ok) {
+          const errorData = await registerResponse.json().catch(() => ({}));
+          throw new Error(extractApiError(errorData, "Account creation failed"));
+        }
+
+        const loginResponse = await fetch(`${backendUrl}/api/login/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken || "",
+          },
+          body: JSON.stringify({
+            email: normalizedForm.email,
+            password: normalizedForm.password,
+          }),
+          credentials: "include",
+        });
+
+        if (!loginResponse.ok) {
+          const errorData = await loginResponse.json().catch(() => ({}));
+          throw new Error(extractApiError(errorData, "Account created but automatic login failed"));
+        }
+
+        try {
+          const refreshCsrf = await fetch(`${backendUrl}/api/csrf/`, { credentials: "include" });
+          if (refreshCsrf.ok) {
+            const refreshData = await refreshCsrf.json();
+            if (refreshData.csrfToken) {
+              localStorage.setItem("csrfToken", refreshData.csrfToken);
+            }
+          }
+        } catch (refreshError) {
+          console.error("Failed to refresh CSRF token after registration", refreshError);
+        }
+
+        await checkAuth();
+      }
+
       const submissionData = new FormData();
-      submissionData.append("full_name", formData.fullName);
-      submissionData.append("email", formData.email);
-      submissionData.append("country", formData.country);
-      submissionData.append("whatsapp", formData.whatsapp);
+      submissionData.append("full_name", normalizedForm.fullName);
+      submissionData.append("email", normalizedForm.email);
+      submissionData.append("country", normalizedForm.country);
+      submissionData.append("whatsapp", normalizedForm.whatsapp);
+      submissionData.append("journal_name", normalizedForm.journalName);
       submissionData.append("article_type", formData.articleType);
       submissionData.append("category", formData.journalType);
       submissionData.append("word_count", formData.wordCount);
@@ -100,49 +199,52 @@ const Publish = () => {
       setIsSubmitting(false);
       toast({
         title: "Submission Failed",
-        description: "There was an error submitting your research. Please try again.",
+        description: error.message || "There was an error submitting your research. Please try again.",
         variant: "destructive",
       });
       return;
     }
 
     toast({
-      title: "Submission Received!",
-      description: "Your research has been submitted for review. Track status in your dashboard.",
+      title: currentUser ? "Submission Received!" : "Account Created And Submission Received!",
+      description: "Your manuscript has been submitted for review. You can track it from your dashboard.",
     });
 
-    // Reset form
     setFormData({
       fullName: "",
       email: "",
       country: "",
       whatsapp: "",
+      journalName: "",
       articleType: "",
       journalType: "",
       wordCount: "",
+      password: "",
     });
     setFile(null);
     setImage(null);
     setImagePreview(null);
     setIsSubmitting(false);
 
-    // Optionally redirect to dashboard
-    if (currentUser) {
-      navigate("/user/dashboard");
-    }
+    navigate("/user/dashboard");
   };
+
+  if (isAuthChecking) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar 
         isLoggedIn={!!currentUser}
         user={currentUser}
-        onSignIn={() => navigate("/")}
-        onSignUp={() => navigate("/")}
+        onSignIn={() => navigate("/login")}
+        onSignUp={() => navigate("/login")}
         onSignOut={() => {
           logoutUser();
           navigate("/");
         }}
+        submitPath="/publish"
       />
 
       <main className="py-12 md:py-20">
@@ -159,16 +261,46 @@ const Publish = () => {
               <FileText className="w-8 h-8" />
             </div>
             <h1 className="font-serif text-3xl md:text-4xl font-bold text-heading mb-3">
-              Submit Your Research
+              {currentUser ? "Submit Your Research" : "Create Account And Submit Your Research"}
             </h1>
             <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              Share your findings with the global academic community. All submissions undergo rigorous peer review.
+              {currentUser
+                ? "Share your findings with the global academic community. All submissions undergo rigorous peer review."
+                : "Fill in your author details and manuscript details together. We will create your account and submit the article in one step."}
             </p>
           </div>
 
           {/* Submission Form */}
           <form onSubmit={handleSubmit} className="bg-card border border-border rounded-2xl p-6 md:p-10">
             <div className="space-y-6">
+              {!currentUser && (
+                <div className="rounded-xl border border-border bg-secondary/30 p-5 space-y-4">
+                  <div>
+                    <h2 className="font-serif text-xl font-semibold text-heading">Author Account Details</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      These details will be used to create your author account before the manuscript is submitted.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="password">
+                      Account Password <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="Create a password"
+                      value={formData.password}
+                      onChange={(e) => handleChange("password", e.target.value)}
+                    />
+                  </div>
+
+                  <p className="text-sm text-muted-foreground">
+                    Already have an account? <Link to="/login" className="text-primary hover:underline">Sign in here</Link>.
+                  </p>
+                </div>
+              )}
+
               {/* Full Name */}
               <div className="space-y-2">
                 <Label htmlFor="fullName">
@@ -179,6 +311,7 @@ const Publish = () => {
                   placeholder="Dr. John Smith"
                   value={formData.fullName}
                   onChange={(e) => handleChange("fullName", e.target.value)}
+                  disabled={!!currentUser}
                 />
               </div>
 
@@ -193,6 +326,7 @@ const Publish = () => {
                   placeholder="john.smith@university.edu"
                   value={formData.email}
                   onChange={(e) => handleChange("email", e.target.value)}
+                  disabled={!!currentUser}
                 />
               </div>
 
@@ -222,6 +356,23 @@ const Publish = () => {
 
               {/* Article Type & Journal Type in grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2 md:col-span-2">
+                  <Label>
+                    Journal Name <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={formData.journalName} onValueChange={(value) => handleChange("journalName", value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select journal" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {JOURNAL_OPTIONS.map((journal) => (
+                        <SelectItem key={journal.title} value={journal.title}>
+                          {journal.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label>
                     Article Type <span className="text-destructive">*</span>
@@ -243,18 +394,12 @@ const Publish = () => {
                   <Label>
                     Journal Category <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={formData.journalType} onValueChange={(value) => handleChange("journalType", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {JOURNAL_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    id="journalType"
+                    value={formData.journalType}
+                    placeholder="Select a journal to auto-fill category"
+                    readOnly
+                  />
                 </div>
               </div>
 
@@ -366,7 +511,7 @@ const Publish = () => {
                 ) : (
                   <span className="flex items-center gap-2">
                     <Send className="w-5 h-5" />
-                    Submit for Review
+                    {currentUser ? "Submit for Review" : "Create Account And Submit"}
                   </span>
                 )}
               </Button>

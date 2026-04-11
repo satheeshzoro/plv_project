@@ -2,13 +2,8 @@ import { Clock, ArrowUpRight } from "lucide-react";
 import { useAppData } from "@/context/AppDataContext";
 
 const ArticleCard = ({ article, index }) => {
-  const { id, title, author, date, publishedDate, category, readTime, image, excerpt } = article;
+  const { id, title, author, date, publishedDate, category, readTime, image, excerpt, file } = article;
   const { recordArticleView } = useAppData();
-
-  const handleReadMore = (e) => {
-    e.preventDefault();
-    recordArticleView(id);
-  };
 
   const getFullUrl = (url) => {
     if (!url) return null;
@@ -17,6 +12,14 @@ const ArticleCard = ({ article, index }) => {
     if (url.startsWith("/media")) return `${backend}${url}`;
     const path = url.startsWith("/") ? url : `/${url}`;
     return `${backend}/media${path}`;
+  };
+
+  const handleReadMore = async () => {
+    const fileUrl = getFullUrl(file);
+    await recordArticleView(id);
+    if (fileUrl) {
+      window.open(fileUrl, "_blank", "noopener,noreferrer");
+    }
   };
 
   return (
@@ -65,14 +68,14 @@ const ArticleCard = ({ article, index }) => {
             <Clock className="w-4 h-4" />
             <span>{readTime || "5 min read"}</span>
           </div>
-          <a
-            href="#"
+          <button
+            type="button"
             onClick={handleReadMore}
             className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-accent transition-smooth group/link"
           >
             Read More
             <ArrowUpRight className="w-4 h-4 transition-transform group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5" />
-          </a>
+          </button>
         </div>
       </div>
     </article>

@@ -1,7 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, BookOpen, Users, Award, BadgeCheck } from "lucide-react";
+import { ArrowRight, Award, BadgeCheck, BookOpen, PlayCircle, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/ThemeContext";
+import doctorHero from "../../assets/main.png";
 import "./HeroSection.css";
 
 const STATS = [
@@ -10,125 +11,100 @@ const STATS = [
   { icon: Award, value: "500+", label: "Partner Institutions" },
 ];
 
-const HeroSection = () => {
+const HeroSection = ({ submitPath = "/publish" }) => {
   const navigate = useNavigate();
   const { isDark } = useTheme();
 
-  if (isDark) {
-    return (
-      <section className="hero-dark-shell">
-        <div className="container py-16 md:py-24 lg:py-28">
-          <div className="hero-dark-content hero-dark-centered">
-            <span className="hero-brand">QUILIVE PUBLISHERS</span>
-            <h1>
-              Future-Ready
-              <br />
-              <span>Academic Publishing</span>
+  return (
+    <section className={`hero-shell ${isDark ? "hero-shell-dark" : ""}`}>
+      <div className="container py-12 md:py-16 lg:py-20">
+        <div className={`hero-card ${isDark ? "hero-card-dark" : ""}`}>
+          <div className="hero-copy">
+            <div className={`hero-kicker ${isDark ? "hero-kicker-dark" : ""}`}>
+              <span className="hero-kicker-dot" />
+              Trusted academic publishing support
+            </div>
+
+            <h1 className="hero-title">
+              Research publishing that helps your work stay visible
             </h1>
-            <p>
-              A futuristic open-access publishing experience where impactful research meets premium digital presence.
+
+            <p className="hero-description">
+              Open-access journals for clinical sciences, biotechnology, pharmacy, nutrition, and interdisciplinary research with streamlined submission and editorial guidance.
             </p>
-            <div className="mt-8 flex flex-col sm:flex-row sm:flex-wrap items-center justify-center gap-3">
+
+            <div className="hero-chip-row">
+              <span className="hero-chip">
+                <BadgeCheck className="h-3.5 w-3.5 text-primary" />
+                Peer-Reviewed
+              </span>
+              <span className="hero-chip">
+                <BadgeCheck className="h-3.5 w-3.5 text-primary" />
+                Open Access
+              </span>
+              <span className="hero-chip">
+                <BadgeCheck className="h-3.5 w-3.5 text-primary" />
+                Journal-Specific
+              </span>
+            </div>
+
+            <div className={`hero-cta-bar ${isDark ? "hero-cta-bar-dark" : ""}`}>
+              <div className="hero-cta-copy">
+                <span className="hero-cta-label">Start your manuscript journey</span>
+                <span className="hero-cta-value">editorial workflow, author submission, publication control</span>
+              </div>
               <Button
                 size="lg"
-                onClick={() => navigate("/submit-manuscript")}
-                className="min-w-[220px] bg-white text-black hover:bg-white/90"
+                onClick={() => navigate(submitPath)}
+                className="hero-primary-button"
               >
-                Submit Manuscript
+                Submit Research
+              </Button>
+            </div>
+
+            <div className="hero-secondary-actions">
+              <Button
+                size="lg"
+                onClick={() => navigate("/journals")}
+                className="group bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                Explore Journals
+                <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
               </Button>
               <Button
                 size="lg"
                 variant="outline"
-                onClick={() => navigate("/journals")}
-                className="min-w-[220px] border-white/40 text-white hover:bg-white/10"
+                onClick={() => navigate("/articles")}
               >
-                Explore Journals
-                <ArrowRight className="ml-2 w-4 h-4" />
+                Read Articles
+                <PlayCircle className="ml-2 h-5 w-5" />
               </Button>
             </div>
           </div>
+
+          <div className="hero-visual">
+            <div className="hero-visual-orbit hero-visual-orbit-top" />
+            <div className="hero-visual-orbit hero-visual-orbit-mid" />
+            <div className="hero-visual-orbit hero-visual-orbit-low" />
+            <div className="hero-avatar hero-avatar-one" />
+            <div className="hero-avatar hero-avatar-two" />
+            <div className="hero-avatar hero-avatar-three" />
+            <img src={doctorHero} alt="Academic publishing support" className="hero-image" />
+          </div>
         </div>
-      </section>
-    );
-  }
 
-  return (
-    <section className="relative gradient-hero overflow-hidden">
-      {/* Decorative elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-accent/5 rounded-full blur-3xl" />
-      </div>
-
-      <div className="container relative py-16 md:py-24 lg:py-32">
-        <div className="max-w-4xl mx-auto text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 text-sm font-medium bg-secondary text-secondary-foreground rounded-full animate-fade-in">
-            <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-            Trusted by leading universities worldwide
-          </div>
-
-          {/* Headline */}
-          <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-bold text-heading leading-tight mb-6 animate-slide-up">
-            Publish With{" "}
-            <span className="text-primary">QuiLive Journals</span>
-          </h1>
-
-          {/* Sub-headline */}
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed animate-slide-up animation-delay-100">
-            Open-access journals for medicine, biotechnology, pharmacy, nutrition, and interdisciplinary clinical research.
-            Build visibility with rigorous peer review and global readership.
-          </p>
-
-          <div className="flex flex-wrap items-center justify-center gap-2 mb-10 animate-slide-up animation-delay-150">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-card border border-border px-3 py-1 text-xs text-foreground">
-              <BadgeCheck className="w-3.5 h-3.5 text-primary" />
-              Peer-Reviewed
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-card border border-border px-3 py-1 text-xs text-foreground">
-              <BadgeCheck className="w-3.5 h-3.5 text-primary" />
-              Open Access
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-card border border-border px-3 py-1 text-xs text-foreground">
-              <BadgeCheck className="w-3.5 h-3.5 text-primary" />
-              Multi-Disciplinary
-            </span>
-          </div>
-
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16 animate-slide-up animation-delay-200">
-            <Button 
-              size="lg" 
-              onClick={() => navigate("/articles")}
-              className="group bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 text-lg"
-            >
-              Start Reading
-              <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
-            </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
-              onClick={() => navigate("/publish")}
-              className="px-8 py-6 text-lg border-border hover:bg-secondary hover:text-secondary-foreground"
-            >
-              Submit Research
-            </Button>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 pt-8 border-t border-border/50 animate-slide-up animation-delay-300">
-            {STATS.map(({ icon: Icon, value, label }) => (
-              <div key={label} className="flex flex-col items-center gap-2">
-                <div className="flex items-center gap-3">
-                  <Icon className="w-5 h-5 text-primary" />
-                  <span className="font-serif text-2xl md:text-3xl font-bold text-heading">
-                    {value}
-                  </span>
-                </div>
-                <span className="text-sm text-muted-foreground">{label}</span>
+        <div className={`hero-stats ${isDark ? "hero-stats-dark" : ""}`}>
+          {STATS.map(({ icon: Icon, value, label }) => (
+            <div key={label} className="hero-stat-card">
+              <div className="hero-stat-icon">
+                <Icon className="h-5 w-5 text-primary" />
               </div>
-            ))}
-          </div>
+              <div>
+                <div className="hero-stat-value">{value}</div>
+                <div className="hero-stat-label">{label}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>

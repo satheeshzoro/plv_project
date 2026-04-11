@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Send, FileText, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CATEGORIES } from "@/data/mockData";
 
 const SubmissionSection = ({ isLoggedIn, onRequireAuth }) => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -25,7 +27,8 @@ const SubmissionSection = ({ isLoggedIn, onRequireAuth }) => {
     e.preventDefault();
     
     if (!isLoggedIn) {
-      onRequireAuth();
+      // Redirect to the combined submit and register page
+      navigate("/submit-and-register");
       return;
     }
 

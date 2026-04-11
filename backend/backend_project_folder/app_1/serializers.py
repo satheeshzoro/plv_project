@@ -5,10 +5,24 @@ User = get_user_model()
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=6)
+    country = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    whatsapp = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = User
-        fields = ("email", "full_name", "password")
+        fields = ("email", "full_name", "password", "country", "whatsapp")
+
+    def validate_email(self, value):
+        normalized_email = value.strip().lower()
+        if User.objects.filter(email__iexact=normalized_email).exists():
+            raise serializers.ValidationError("An account with this email already exists.")
+        return normalized_email
+
+    def validate_full_name(self, value):
+        full_name = value.strip()
+        if not full_name:
+            raise serializers.ValidationError("Full name is required.")
+        return full_name
 
     def create(self, validated_data):
         password = validated_data.pop("password")
@@ -30,9 +44,10 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
+        email = data["email"].strip().lower()
         user = authenticate(
             self.context["request"],
-            email=data["email"],
+            email=email,
             password=data["password"],
         )
 
@@ -42,6 +57,7 @@ class LoginSerializer(serializers.Serializer):
         if not user.is_active:
             raise serializers.ValidationError("User account is disabled")
 
+        data["email"] = email
         data["user"] = user
         return data
 
@@ -51,13 +67,45 @@ from rest_framework import serializers
 from .models import Article
 
 class ArticleCreateSerializer(serializers.ModelSerializer):
+    JOURNAL_CATEGORY_MAP = {
+        "Journal of Clinical Sciences Research": "Medical Sciences",
+        "Journal of Pharmaceutical Sciences Drug Technology": "Biotechnology",
+        "Biochemistry & Physiology Journal": "Biotechnology",
+        "Paediatrics & Childhood Obesity": "Medical Sciences",
+        "Health Care Research & Case Reports Journal": "Medical Sciences",
+        "Journal of Molecular Biology & Infectious Diseases": "Biotechnology",
+        "Food & Nutritional Sciences Journal": "Environmental Science",
+        "Genetics & Biotechnology Journal": "Biotechnology",
+        "Neurological & Psychological Journal": "Medical Sciences",
+        "Journal of Gynaecology & Obstetrics": "Medical Sciences",
+    }
+
     # Map frontend fields to backend model fields
     full_name = serializers.CharField(source='author_name')
     email = serializers.EmailField(source='author_email')
+    journal_name = serializers.ChoiceField(choices=Article.JOURNAL_NAME_CHOICES)
+    category = serializers.ChoiceField(choices=Article.CATEGORY_CHOICES)
+    article_type = serializers.ChoiceField(choices=Article.ARTICLE_TYPE_CHOICES)
 
     class Meta:
         model = Article
-        fields = ['full_name', 'email', 'category', 'article_type', 'file', 'image', 'word_count']
+        fields = ['full_name', 'email', 'category', 'journal_name', 'article_type', 'file', 'image', 'word_count']
+
+    def validate(self, attrs):
+        journal_name = attrs.get("journal_name")
+        category = attrs.get("category")
+        expected_category = self.JOURNAL_CATEGORY_MAP.get(journal_name)
+
+        if expected_category and category != expected_category:
+            raise serializers.ValidationError(
+                {
+                    "category": (
+                        f'"{journal_name}" must be submitted under "{expected_category}".'
+                    )
+                }
+            )
+
+        return attrs
 
     def create(self, validated_data):
         # Auto-generate title from filename since frontend doesn't send it
@@ -96,7 +144,7 @@ class EditorSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "email", "full_name", "pen_name")
+        fields = ("id", "email", "full_name", "pen_name", "country", "mapped_journal_category")
 
 
 # core/serializers.py
@@ -123,7 +171,7 @@ class EditorCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("email", "full_name", "pen_name", "password")
+        fields = ("email", "full_name", "pen_name", "password", "mapped_journal_category")
 
     def create(self, validated_data):
         password = validated_data.pop("password")
@@ -133,3 +181,16 @@ class EditorCreateSerializer(serializers.ModelSerializer):
             password=password
         )
         return user
+
+
+class EditorCategoryMappingSerializer(serializers.ModelSerializer):
+    mapped_journal_category = serializers.ChoiceField(
+        choices=Article.CATEGORY_CHOICES,
+        allow_blank=True,
+        allow_null=True,
+        required=False,
+    )
+
+    class Meta:
+        model = User
+        fields = ("mapped_journal_category",)

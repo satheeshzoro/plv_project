@@ -6,7 +6,8 @@ from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from django.db.models import F
+from django.db.models import Count, F, Q
+from django.core.mail import send_mail
 from datetime import timedelta
 
 from rest_framework.views import APIView
@@ -14,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.generics import ListAPIView, CreateAPIView, ListCreateAPIView
 from rest_framework.authentication import SessionAuthentication
 
-from .models import Article, SiteSettings
+from .models import Article, ArticleView, SiteSettings
 from .serializers import *
 from .permissions import IsAdmin, IsEditor, IsUser
 
@@ -95,6 +96,7 @@ class CurrentUserAPIView(APIView):
             "email": user.email,
             "full_name": user.full_name,
             "role": user.role,
+            "mapped_journal_category": getattr(user, "mapped_journal_category", None),
         })
 
 # ==============================================================================
@@ -103,7 +105,7 @@ class CurrentUserAPIView(APIView):
 
 class MySubmissionsAPIView(APIView):
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsUser]
     def get(self, request):
         articles = Article.objects.filter(submitted_by=request.user)
         serializer = ArticleListSerializer(articles, many=True, context={"request": request})
@@ -119,7 +121,28 @@ class AssignEditorAPIView(APIView):
                 {"detail": "editor_id is required"},
                 status=400
             )
-        article.assigned_to_id = editor_id
+
+        editor = get_object_or_404(User, pk=editor_id, role="EDITOR")
+
+        if not editor.mapped_journal_category:
+            return Response(
+                {"detail": "Editor must have a mapped journal category before assignment."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if editor.mapped_journal_category != article.category:
+            return Response(
+                {"detail": "Editor can only be assigned submissions from their mapped journal category."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if article.status != "PENDING":
+            return Response(
+                {"detail": "Only pending submissions can be assigned."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        article.assigned_to = editor
         article.status = "UNDER_REVIEW"
         article.save()
         return Response({"message": "Editor assigned successfully"})
@@ -128,6 +151,8 @@ class EditorTasksAPIView(APIView):
     permission_classes = [IsEditor]
     def get(self, request):
         articles = Article.objects.filter(assigned_to=request.user)
+        if request.user.mapped_journal_category:
+            articles = articles.filter(category=request.user.mapped_journal_category)
         serializer = ArticleListSerializer(articles, many=True, context={"request": request})
         return Response(serializer.data)
 
@@ -141,8 +166,14 @@ class PublishedArticlesAPIView(APIView):
 class IncrementArticleViewAPIView(APIView):
     permission_classes = [AllowAny]
     def post(self, request, pk):
+        article = get_object_or_404(Article, pk=pk)
         Article.objects.filter(pk=pk).update(views=F('views') + 1)
-        return Response({"message": "View counted"})
+        ArticleView.objects.create(
+            article=article,
+            user=request.user if request.user.is_authenticated else None,
+        )
+        article.refresh_from_db(fields=["views"])
+        return Response({"message": "View counted", "views": article.views})
 
 class IncrementArticleDownloadAPIView(APIView):
     permission_classes = [AllowAny]
@@ -154,46 +185,101 @@ class TrendingArticlesAPIView(ListAPIView):
     serializer_class = ArticleListSerializer
     permission_classes = [AllowAny]
     def get_queryset(self):
-        # Last 7 days
-        one_week_ago = timezone.now().date() - timedelta(days=7)
-        # Filter published, recent. Sort by (views + downloads*2) desc
+        one_week_ago = timezone.now() - timedelta(days=7)
         return Article.objects.filter(
             status="PUBLISHED",
-            published_date__gte=one_week_ago
         ).annotate(
-            popularity=F('views') + F('downloads') * 2
-        ).order_by('-popularity')[:6]
+            weekly_views=Count(
+                "view_events",
+                filter=Q(view_events__created_at__gte=one_week_ago),
+            ),
+        ).order_by("-weekly_views", "-views", "-published_date")[:6]
     def get_serializer_context(self):
         return {'request': self.request}
 
 class SubmissionCreateAPIView(CreateAPIView):
     authentication_classes = [SessionAuthentication]
     serializer_class = ArticleCreateSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsUser]
 
     def perform_create(self, serializer):
-        serializer.save(
+        article = serializer.save(
             submitted_by=self.request.user,
             status="PENDING"
+        )
+        self.send_submission_notifications(article)
+
+    def send_submission_notifications(self, article):
+        site_settings = SiteSettings.get_solo()
+        notifications = site_settings.submission_notifications or {}
+        common_email = notifications.get("common_email", "").strip()
+        journal_emails = notifications.get("journal_emails", {}) or {}
+        journal_email = journal_emails.get(article.journal_name, "").strip()
+
+        recipients = []
+        if common_email:
+            recipients.append(common_email)
+        if journal_email and journal_email not in recipients:
+            recipients.append(journal_email)
+
+        if not recipients:
+            return
+
+        subject = f"New manuscript submission: {article.journal_name or article.category}"
+        message = (
+            f"A new manuscript has been submitted.\n\n"
+            f"Author: {article.author_name}\n"
+            f"Author email: {article.author_email}\n"
+            f"Journal: {article.journal_name or 'Not provided'}\n"
+            f"Category: {article.category}\n"
+            f"Article type: {article.article_type}\n"
+            f"Word count: {article.word_count}\n"
+            f"Submission ID: {article.id}\n"
+        )
+
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            recipients,
+            fail_silently=True,
         )
 
 class UpdateSubmissionStatusAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
-        article = Article.objects.get(pk=pk)
+        article = get_object_or_404(Article, pk=pk)
         new_status = request.data.get("status")
+        editor_report = (request.data.get("editor_report") or "").strip()
 
         if request.user.role == "EDITOR":
             if article.assigned_to != request.user:
                 return Response({"error": "Not your assigned article"}, status=403)
 
+            if not request.user.mapped_journal_category:
+                return Response({"error": "No journal category mapped to this editor"}, status=403)
+
+            if article.category != request.user.mapped_journal_category:
+                return Response({"error": "This submission is outside your mapped journal category"}, status=403)
+
             if new_status not in ["COMPLETED", "REJECTED"]:
                 return Response({"error": "Invalid status for editor"}, status=400)
+
+            if not editor_report:
+                return Response({"error": "editor_report is required"}, status=400)
+
+            article.editor_report = editor_report
 
         elif request.user.role == "ADMIN":
             if new_status not in ["PUBLISHED", "REJECTED"]:
                 return Response({"error": "Invalid status for admin"}, status=400)
+
+            if new_status == "PUBLISHED" and article.status != "COMPLETED":
+                return Response(
+                    {"error": "Only completed submissions can be published"},
+                    status=400,
+                )
 
             if new_status == "PUBLISHED":
                 article.published_date = timezone.now().date()
@@ -219,7 +305,11 @@ class AllSubmissionsAPIView(ListAPIView):
 # ==============================================================================
 
 class EditorListCreateAPIView(ListCreateAPIView):
-    permission_classes = [IsAuthenticated, IsAdmin]
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [AllowAny()]
+        return [IsAuthenticated(), IsAdmin()]
+
     def get_queryset(self):
         return User.objects.filter(role="EDITOR")
     def get_serializer_class(self):
@@ -227,11 +317,55 @@ class EditorListCreateAPIView(ListCreateAPIView):
             return EditorCreateSerializer
         return EditorSerializer
 
+
+class UpdateEditorCategoryAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def patch(self, request, pk):
+        editor = get_object_or_404(User, pk=pk, role="EDITOR")
+        serializer = EditorCategoryMappingSerializer(
+            editor,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(EditorSerializer(editor).data, status=status.HTTP_200_OK)
+
 class UserListAPIView(ListAPIView):
     serializer_class = UserListSerializer
     permission_classes = [IsAuthenticated, IsAdmin]
     def get_queryset(self):
         return User.objects.filter(role="USER")
+
+class PromoteUserToEditorAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def patch(self, request, pk):
+        user = get_object_or_404(User, pk=pk)
+
+        if user.role != "USER":
+            return Response(
+                {"detail": "Only users with USER role can be promoted to editor."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.role = "EDITOR"
+        user.pen_name = request.data.get("pen_name", user.pen_name)
+        user.country = request.data.get("country", user.country)
+        user.mapped_journal_category = None
+        user.save()
+
+        return Response(
+            {
+                "message": "User promoted to editor successfully",
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "role": user.role,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 # ==============================================================================
 # SITE SETTINGS VIEW

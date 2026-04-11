@@ -18,16 +18,17 @@ const StaticPageLayout = ({ title, subtitle, children }) => {
           logoutUser();
           navigate("/");
         }}
+        submitPath={currentUser ? "/publish" : "/submit-and-register"}
       />
 
       <main className="py-12 md:py-16">
         <div className="container">
-          <div className="mb-10">
-            <h1 className="font-serif text-3xl md:text-4xl lg:text-5xl font-bold text-heading mb-4">
+          <div className="mb-10 rounded-[28px] border border-border bg-card p-8 shadow-soft md:p-10">
+            <h1 className="mb-4 font-serif text-3xl font-bold text-heading md:text-4xl lg:text-5xl">
               {title}
             </h1>
             {subtitle ? (
-              <p className="text-muted-foreground text-lg max-w-3xl">{subtitle}</p>
+              <p className="max-w-3xl text-lg text-muted-foreground">{subtitle}</p>
             ) : null}
           </div>
           {children}

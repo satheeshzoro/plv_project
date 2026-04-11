@@ -2,17 +2,18 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { AppDataProvider } from "@/context/AppDataContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import ScrollToTop from "@/components/ScrollToTop";
+import StaticContentPage from "./pages/StaticContentPage";
+import ContactPage from "./pages/ContactPage";
 import Index from "./pages/Index";
 import Articles from "./pages/Articles";
 import Publish from "./pages/Publish";
 import UserDashboard from "./pages/UserDashboard";
-import AdminLogin from "./pages/AdminLogin";
+import CommonLogin from "./pages/CommonLogin";
 import AdminDashboard from "./pages/AdminDashboard";
-import EditorLogin from "./pages/EditorLogin";
 import EditorDashboard from "./pages/EditorDashboard";
 import EditorArticleView from "./pages/EditorArticleView";
 import NotFound from "./pages/NotFound";
@@ -32,11 +33,21 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/articles" element={<Articles />} />
               <Route path="/journals" element={<Articles />} />
+              <Route path="/about-us" element={<StaticContentPage />} />
+              <Route path="/open-access" element={<StaticContentPage />} />
+              <Route path="/guidelines" element={<StaticContentPage />} />
+              <Route path="/author-guidelines" element={<StaticContentPage />} />
+              <Route path="/processing-fee" element={<StaticContentPage />} />
+              <Route path="/manuscript-guidelines" element={<StaticContentPage />} />
+              <Route path="/peer-review-process" element={<StaticContentPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              <Route path="/submit-and-register" element={<Publish />} />
               <Route path="/publish" element={<Publish />} />
+              <Route path="/login" element={<CommonLogin />} />
               <Route path="/user/dashboard" element={<UserDashboard />} />
-              <Route path="/admin" element={<AdminLogin />} />
+              <Route path="/admin" element={<Navigate to="/login" replace />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              <Route path="/editor" element={<EditorLogin />} />
+              <Route path="/editor" element={<Navigate to="/login" replace />} />
               <Route path="/editor/dashboard" element={<EditorDashboard />} />
               <Route path="/editor/submission/:id" element={<EditorArticleView />} />
               <Route path="*" element={<NotFound />} />

@@ -22,11 +22,10 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
+import { ARTICLE_TYPES, JOURNAL_CATEGORY_BY_TITLE, JOURNAL_OPTIONS } from "@/data/journalOptions";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-
-const ARTICLE_TYPES = ["Research Paper", "Review Article", "Case Study", "Technical Report"];
-const JOURNAL_TYPES = ["Computer Science", "Neuroscience", "Quantum Physics", "Architecture", "Economics", "Biotechnology"];
+import mainImage from "../../assets/main.png";
 
 const StatusBadge = ({ status }) => {
   const statusConfig = {
@@ -57,6 +56,7 @@ const UserDashboard = () => {
     email: "",
     country: "",
     whatsapp: "",
+    journalName: "",
     articleType: "",
     journalType: "",
     wordCount: "",
@@ -84,6 +84,15 @@ const UserDashboard = () => {
   };
 
   const handleSelectChange = (name, value) => {
+    if (name === "journalName") {
+      setFormData((prev) => ({
+        ...prev,
+        journalName: value,
+        journalType: JOURNAL_CATEGORY_BY_TITLE[value] || "",
+      }));
+      return;
+    }
+
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -108,7 +117,7 @@ const UserDashboard = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.fullName || !formData.email || !formData.articleType || !formData.journalType || !formData.wordCount || !formData.file || !formData.image) {
+    if (!formData.fullName || !formData.email || !formData.journalName || !formData.articleType || !formData.journalType || !formData.wordCount || !formData.file || !formData.image) {
       toast({
         title: "Missing Fields",
         description: "Please fill in all required fields.",
@@ -123,6 +132,7 @@ const UserDashboard = () => {
       submissionData.append("email", formData.email);
       submissionData.append("country", formData.country);
       submissionData.append("whatsapp", formData.whatsapp);
+      submissionData.append("journal_name", formData.journalName);
       submissionData.append("article_type", formData.articleType);
       submissionData.append("category", formData.journalType);
       submissionData.append("word_count", formData.wordCount);
@@ -141,6 +151,7 @@ const UserDashboard = () => {
         email: "",
         country: "",
         whatsapp: "",
+        journalName: "",
         articleType: "",
         journalType: "",
         wordCount: "",
@@ -157,7 +168,7 @@ const UserDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-shell min-h-screen bg-background">
       <Navbar 
         isLoggedIn={true}
         user={currentUser}
@@ -177,14 +188,20 @@ const UserDashboard = () => {
             Back to Home
           </Link>
 
-          <div className="mb-10">
-            <h1 className="font-serif text-3xl md:text-4xl font-bold text-heading mb-2">
-              User Dashboard
-            </h1>
-            <p className="text-muted-foreground">
-              Submit your research and track its progress
-            </p>
-          </div>
+          <section className="role-hero mb-10 grid gap-8 p-6 md:grid-cols-[1.1fr_0.9fr] md:p-8">
+            <div className="relative z-10">
+              <span className="brand-badge">Author Workspace</span>
+              <h1 className="mt-5 font-serif text-4xl font-bold text-heading md:text-5xl">
+                Submit your research and track the full editorial journey.
+              </h1>
+              <p className="mt-4 max-w-2xl text-muted-foreground">
+                Keep your manuscript details ready, send new work for review, and monitor every decision from submission to publication.
+              </p>
+            </div>
+            <div className="brand-image-frame p-4">
+              <img src={mainImage} alt="Author submission workspace" className="w-full object-contain" />
+            </div>
+          </section>
 
           <Tabs defaultValue="submit" className="space-y-6">
             <TabsList className="grid w-full grid-cols-2 max-w-md">
@@ -252,6 +269,25 @@ const UserDashboard = () => {
                     </div>
                     
                     <div className="space-y-2">
+                      <Label>Journal Name *</Label>
+                      <Select
+                        value={formData.journalName}
+                        onValueChange={(value) => handleSelectChange("journalName", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select journal" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {JOURNAL_OPTIONS.map((journal) => (
+                            <SelectItem key={journal.title} value={journal.title}>
+                              {journal.title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
                       <Label>Article Type *</Label>
                       <Select
                         value={formData.articleType}
@@ -271,22 +307,13 @@ const UserDashboard = () => {
                     </div>
                     
                     <div className="space-y-2">
-                      <Label>Journal Type *</Label>
-                      <Select
+                      <Label htmlFor="journalType">Journal Category *</Label>
+                      <Input
+                        id="journalType"
                         value={formData.journalType}
-                        onValueChange={(value) => handleSelectChange("journalType", value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select journal type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {JOURNAL_TYPES.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder="Select a journal to auto-fill category"
+                        readOnly
+                      />
                     </div>
                   </div>
 

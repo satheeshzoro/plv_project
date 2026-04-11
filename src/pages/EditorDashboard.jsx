@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   FileText,
@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
+import logoImage from "../../assets/logo.png";
+import mainImage from "../../assets/main.png";
 
 const StatCard = ({ title, value, icon: Icon, variant = "default" }) => {
   const variants = {
@@ -60,6 +62,7 @@ const EditorDashboard = () => {
   const { toast } = useToast();
   const {
     currentEditor,
+    isAdminLoggedIn,
     logoutEditor,
     isAuthChecking,
     submissions,
@@ -77,10 +80,12 @@ const EditorDashboard = () => {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
-  // Redirect if not logged in
+  if (isAdminLoggedIn) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
   if (!currentEditor) {
-    navigate("/editor");
-    return null;
+    return <Navigate to="/login" replace />;
   }
 
   const editorStats = getEditorStats(currentEditor.id);
@@ -88,7 +93,7 @@ const EditorDashboard = () => {
 
   const handleLogout = () => {
     logoutEditor();
-    navigate("/editor");
+    navigate("/login");
   };
 
   const handleUpdateStatus = (submissionId, status) => {
@@ -105,13 +110,15 @@ const EditorDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="dashboard-shell">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-card border-b border-border">
+      <header className="brand-topbar sticky top-0 z-50 border-b border-border">
         <div className="container flex items-center justify-between h-16">
           <div className="flex items-center gap-4">
-            <span className="font-serif text-2xl font-bold text-primary">AJ</span>
-            <span className="text-muted-foreground">Editor Dashboard</span>
+            <span className="brand-logo-mark">
+              <img src={logoImage} alt="QuiLive logo" className="h-8 w-8 object-contain" />
+            </span>
+            <span className="text-muted-foreground">Editor Panel</span>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">
@@ -126,6 +133,21 @@ const EditorDashboard = () => {
       </header>
 
       <main className="container py-8">
+        <section className="role-hero mb-8 grid gap-8 p-6 md:grid-cols-[1.1fr_0.9fr] md:p-8">
+          <div className="relative z-10">
+            <span className="brand-badge">Editorial Workspace</span>
+            <h1 className="mt-5 font-serif text-4xl font-semibold text-heading md:text-5xl">
+              Review assigned manuscripts and return a clear decision to admin.
+            </h1>
+            <p className="mt-4 max-w-2xl text-muted-foreground">
+              Welcome, {currentEditor.name}. This panel keeps your review queue, article decisions, and homepage media controls in one place.
+            </p>
+          </div>
+          <div className="brand-image-frame p-4">
+            <img src={mainImage} alt="Editor review workspace" className="w-full object-contain" />
+          </div>
+        </section>
+
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList className="flex flex-wrap gap-2 h-auto bg-transparent p-0">
             <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">

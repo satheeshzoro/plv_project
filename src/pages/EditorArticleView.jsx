@@ -1,6 +1,9 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { Navigate, useParams, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { ArrowLeft, CheckCircle, XCircle, Download, FileText, Calendar, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useAppData } from "@/context/AppDataContext";
 import { useToast } from "@/hooks/use-toast";
 import Navbar from "@/components/Navbar";
@@ -9,7 +12,8 @@ const EditorArticleView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { submissions, updateSubmissionStatus, currentEditor, logoutEditor } = useAppData();
+  const { submissions, updateSubmissionStatus, currentEditor, isAdminLoggedIn, logoutEditor } = useAppData();
+  const [editorReport, setEditorReport] = useState("");
 
   const submission = submissions.find((s) => s.id === parseInt(id));
 
@@ -30,6 +34,14 @@ const EditorArticleView = () => {
     return `${backend}/media${path}`;
   };
 
+  if (isAdminLoggedIn) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
+  if (!currentEditor) {
+    return <Navigate to="/login" replace />;
+  }
+
   if (!submission) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -39,8 +51,19 @@ const EditorArticleView = () => {
   }
 
   const handleStatusUpdate = async (status) => {
+    if (!editorReport.trim()) {
+      toast({
+        title: "Review Report Required",
+        description: "Please add your editor report before submitting the review.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      await updateSubmissionStatus(submission.id, status);
+      await updateSubmissionStatus(submission.id, status, {
+        editor_report: editorReport.trim(),
+      });
       toast({
         title: status === "COMPLETED" ? "Article Accepted" : "Article Rejected",
         description: `The submission has been marked as ${status.toLowerCase()}.`,
@@ -62,7 +85,7 @@ const EditorArticleView = () => {
         user={currentEditor}
         onSignOut={() => {
           logoutEditor();
-          navigate("/editor");
+          navigate("/login");
         }}
       />
 
@@ -113,6 +136,17 @@ const EditorArticleView = () => {
                   <span>Submitted: {submission.submittedDate}</span>
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="editor-report">Editor Review Report</Label>
+              <Textarea
+                id="editor-report"
+                value={editorReport}
+                onChange={(e) => setEditorReport(e.target.value)}
+                placeholder="Summarize the review decision, revision concerns, and recommendation for admin."
+                className="min-h-40"
+              />
             </div>
 
             {/* Actions Bar */}

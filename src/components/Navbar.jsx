@@ -22,6 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import logoImage from "../../assets/logo.png";
 
 const SOCIAL_LINKS = [
   { icon: Instagram, href: "https://instagram.com", label: "Instagram" },
@@ -33,7 +34,6 @@ const SOCIAL_LINKS = [
 const PRIMARY_LINKS = [
   { label: "Home", to: "/" },
   { label: "Journals", to: "/journals" },
-  { label: "Submit Manuscript", to: "/submit-manuscript" },
 ];
 
 const MORE_LINKS = [
@@ -49,7 +49,7 @@ const GUIDELINE_LINKS = [
   { label: "Peer Review Process", to: "/peer-review-process" },
 ];
 
-const Navbar = ({ isLoggedIn, user, onSignIn, onSignUp, onSignOut }) => {
+const Navbar = ({ isLoggedIn, user, onSignIn, onSignUp, onSignOut, submitPath = "/publish" }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isDark, toggleTheme } = useTheme();
 
@@ -57,12 +57,17 @@ const Navbar = ({ isLoggedIn, user, onSignIn, onSignUp, onSignOut }) => {
     <header className="sticky top-0 z-50 surface-elevated border-b border-border/50 backdrop-blur-sm bg-background/95">
       <nav className="container flex items-center justify-between h-16 md:h-18">
         {/* Logo */}
-        <a href="/" className="flex items-center gap-1 group">
-          <span className="font-serif text-2xl md:text-3xl font-bold text-primary transition-smooth group-hover:text-accent">
-            AJ
+        <a href="/" className="flex items-center gap-3 group">
+          <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+            <img src={logoImage} alt="QuiLive logo" className="h-8 w-8 object-contain" />
           </span>
-          <span className="hidden sm:inline font-serif text-lg text-muted-foreground ml-2">
-            QUILIVE
+          <span className="hidden sm:flex flex-col leading-none">
+            <span className="font-serif text-lg font-semibold text-heading transition-smooth group-hover:text-primary">
+              QuiLive
+            </span>
+            <span className="mt-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+              Academic Hub
+            </span>
           </span>
         </a>
 
@@ -73,6 +78,9 @@ const Navbar = ({ isLoggedIn, user, onSignIn, onSignUp, onSignOut }) => {
               {label}
             </Link>
           ))}
+          <Link to={submitPath} className="text-[13px] font-medium text-muted-foreground hover:text-primary transition-smooth">
+            Submit Manuscript
+          </Link>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -176,6 +184,9 @@ const Navbar = ({ isLoggedIn, user, onSignIn, onSignUp, onSignOut }) => {
                   {label}
                 </Link>
               ))}
+              <Link to={submitPath} className="text-muted-foreground hover:text-primary transition-smooth py-1.5">
+                Submit Manuscript
+              </Link>
               <div className="text-xs uppercase text-muted-foreground mt-1">More</div>
               {MORE_LINKS.map(({ label, to }) => (
                 <Link key={label} to={to} className="text-sm text-muted-foreground hover:text-primary transition-smooth py-1">

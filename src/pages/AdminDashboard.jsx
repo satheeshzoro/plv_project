@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
@@ -11,7 +11,6 @@ import {
   Plus,
   Trash2,
   UserPlus,
-  Edit,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,14 +26,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -43,6 +34,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
+import logoImage from "../../assets/logo.png";
+import mainImage from "../../assets/main.png";
 
 const StatCard = ({ title, value, icon: Icon }) => (
   <div className="bg-card border border-border rounded-lg p-6">
@@ -58,6 +51,25 @@ const StatCard = ({ title, value, icon: Icon }) => (
   </div>
 );
 
+const JOURNAL_NOTIFICATION_TITLES = [
+  "Journal of Clinical Sciences Research",
+  "Journal of Pharmaceutical Sciences Drug Technology",
+  "Biochemistry & Physiology Journal",
+  "Paediatrics & Childhood Obesity",
+  "Health Care Research & Case Reports Journal",
+  "Journal of Molecular Biology & Infectious Diseases",
+  "Food & Nutritional Sciences Journal",
+  "Genetics & Biotechnology Journal",
+  "Neurological & Psychological Journal",
+  "Journal of Gynaecology & Obstetrics",
+];
+
+const JOURNAL_CATEGORY_OPTIONS = [
+  "Medical Sciences",
+  "Biotechnology",
+  "Environmental Science",
+];
+
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -67,11 +79,10 @@ const AdminDashboard = () => {
     adminUser,
     isAuthChecking,
     editors,
-    addEditor,
-    deleteEditor,
+    users,
+    promoteUserToEditor,
+    updateEditorJournalCategory,
     journals,
-    addJournal,
-    deleteJournal,
     submissions,
     assignSubmission,
     publishSubmission,
@@ -82,54 +93,26 @@ const AdminDashboard = () => {
     getStats,
   } = useAppData();
 
-  const [newEditor, setNewEditor] = useState({ name: "", email: "", penName: "", country: "" });
-  const [newJournal, setNewJournal] = useState({ title: "", author: "", category: "" });
   const [newCarouselUrl, setNewCarouselUrl] = useState("");
   const [editingSettings, setEditingSettings] = useState(settings);
-  const [isEditorDialogOpen, setIsEditorDialogOpen] = useState(false);
-  const [isJournalDialogOpen, setIsJournalDialogOpen] = useState(false);
+
+  useEffect(() => {
+    setEditingSettings(settings);
+  }, [settings]);
 
   if (isAuthChecking) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
-  // Redirect if not logged in
   if (!isAdminLoggedIn) {
-    navigate("/admin");
-    return null;
+    return <Navigate to="/login" replace />;
   }
 
   const stats = getStats();
 
   const handleLogout = () => {
     logoutAdmin();
-    navigate("/admin");
-  };
-
-  const handleAddEditor = () => {
-    if (!newEditor.name || !newEditor.email) {
-      toast({ title: "Please fill required fields", variant: "destructive" });
-      return;
-    }
-    addEditor({ ...newEditor, password: "editor123" });
-    setNewEditor({ name: "", email: "", penName: "", country: "" });
-    setIsEditorDialogOpen(false);
-    toast({ title: "Editor added successfully!" });
-  };
-
-  const handleAddJournal = () => {
-    if (!newJournal.title || !newJournal.author) {
-      toast({ title: "Please fill required fields", variant: "destructive" });
-      return;
-    }
-    addJournal({
-      ...newJournal,
-      image: "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=600&h=400&fit=crop",
-      excerpt: "New journal entry",
-    });
-    setNewJournal({ title: "", author: "", category: "" });
-    setIsJournalDialogOpen(false);
-    toast({ title: "Journal added successfully!" });
+    navigate("/login");
   };
 
   const handleAddCarouselImage = () => {
@@ -145,12 +128,14 @@ const AdminDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="dashboard-shell">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-card border-b border-border">
+      <header className="brand-topbar sticky top-0 z-50 border-b border-border">
         <div className="container flex items-center justify-between h-16">
           <div className="flex items-center gap-4">
-            <span className="font-serif text-2xl font-bold text-primary">AJ</span>
+            <span className="brand-logo-mark">
+              <img src={logoImage} alt="QuiLive logo" className="h-8 w-8 object-contain" />
+            </span>
             <span className="text-muted-foreground">
               Admin Dashboard <span className="hidden sm:inline mx-2">•</span> Welcome, {adminUser?.name || adminUser?.full_name || "Admin"}
             </span>
@@ -163,6 +148,21 @@ const AdminDashboard = () => {
       </header>
 
       <main className="container py-8">
+        <section className="role-hero mb-8 grid gap-8 p-6 md:grid-cols-[1.1fr_0.9fr] md:p-8">
+          <div className="relative z-10">
+            <span className="brand-badge">Administrator Workspace</span>
+            <h1 className="mt-5 font-serif text-4xl font-semibold text-heading md:text-5xl">
+              Manage people, review flow, and publication decisions in one place.
+            </h1>
+            <p className="mt-4 max-w-2xl text-muted-foreground">
+              Welcome, {adminUser?.name || adminUser?.full_name || "Admin"}. Track submissions, assign editors, promote users, and move accepted work into publication.
+            </p>
+          </div>
+          <div className="brand-image-frame p-4">
+            <img src={mainImage} alt="Admin publishing workspace" className="w-full object-contain" />
+          </div>
+        </section>
+
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList className="flex flex-wrap gap-2 h-auto bg-transparent p-0">
             <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
@@ -172,6 +172,10 @@ const AdminDashboard = () => {
             <TabsTrigger value="editors" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Users className="w-4 h-4 mr-2" />
               Editors
+            </TabsTrigger>
+            <TabsTrigger value="users" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <UserPlus className="w-4 h-4 mr-2" />
+              Users
             </TabsTrigger>
             <TabsTrigger value="journals" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <BookOpen className="w-4 h-4 mr-2" />
@@ -204,54 +208,11 @@ const AdminDashboard = () => {
           {/* Editors Tab */}
           <TabsContent value="editors">
             <div className="bg-card border border-border rounded-lg p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-serif text-xl font-semibold">Manage Editors</h2>
-                <Dialog open={isEditorDialogOpen} onOpenChange={setIsEditorDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Editor
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add New Editor</DialogTitle>
-                      <DialogDescription>Enter the editor details below.</DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 mt-4">
-                      <div>
-                        <Label>Name *</Label>
-                        <Input
-                          value={newEditor.name}
-                          onChange={(e) => setNewEditor({ ...newEditor, name: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label>Email *</Label>
-                        <Input
-                          type="email"
-                          value={newEditor.email}
-                          onChange={(e) => setNewEditor({ ...newEditor, email: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label>Pen Name</Label>
-                        <Input
-                          value={newEditor.penName}
-                          onChange={(e) => setNewEditor({ ...newEditor, penName: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label>Country</Label>
-                        <Input
-                          value={newEditor.country}
-                          onChange={(e) => setNewEditor({ ...newEditor, country: e.target.value })}
-                        />
-                      </div>
-                      <Button onClick={handleAddEditor} className="w-full">Add Editor</Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+              <div className="mb-6">
+                <h2 className="font-serif text-xl font-semibold">Active Editors</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Editors can log in from the common sign-in page and are redirected automatically based on role.
+                </p>
               </div>
 
               <Table>
@@ -261,7 +222,7 @@ const AdminDashboard = () => {
                     <TableHead>Email</TableHead>
                     <TableHead>Pen Name</TableHead>
                     <TableHead>Country</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>Mapped Category</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -272,20 +233,96 @@ const AdminDashboard = () => {
                       <TableCell>{editor.penName || "-"}</TableCell>
                       <TableCell>{editor.country || "-"}</TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            deleteEditor(editor.id);
-                            toast({ title: "Editor deleted" });
+                        <Select
+                          value={editor.mappedJournalCategory || "unassigned"}
+                          onValueChange={async (value) => {
+                            try {
+                              await updateEditorJournalCategory(
+                                editor.id,
+                                value === "unassigned" ? "" : value,
+                              );
+                              toast({ title: "Editor category updated" });
+                            } catch (error) {
+                              toast({
+                                title: "Failed to update editor category",
+                                description: error.message,
+                                variant: "destructive",
+                              });
+                            }
                           }}
-                          className="text-destructive"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <SelectTrigger className="w-52">
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                            {JOURNAL_CATEGORY_OPTIONS.map((category) => (
+                              <SelectItem key={category} value={category}>
+                                {category}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="users">
+            <div className="bg-card border border-border rounded-lg p-6">
+              <div className="mb-6">
+                <h2 className="font-serif text-xl font-semibold">Registered Users</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  New registrations stay as `USER` by default. Only admin can grant editor access.
+                </p>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.full_name}</TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>{user.role}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await promoteUserToEditor(user.id);
+                              toast({ title: "Editor access granted" });
+                            } catch (error) {
+                              toast({
+                                title: "Failed to grant editor access",
+                                description: error.message,
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                        >
+                          Grant Editor Access
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))}
+                  {users.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                        No registered users are waiting for promotion.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -295,45 +332,7 @@ const AdminDashboard = () => {
           <TabsContent value="journals">
             <div className="bg-card border border-border rounded-lg p-6">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="font-serif text-xl font-semibold">Manage Journals</h2>
-                <Dialog open={isJournalDialogOpen} onOpenChange={setIsJournalDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Journal
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add New Journal</DialogTitle>
-                      <DialogDescription>Enter the journal details below.</DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 mt-4">
-                      <div>
-                        <Label>Title *</Label>
-                        <Input
-                          value={newJournal.title}
-                          onChange={(e) => setNewJournal({ ...newJournal, title: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label>Author *</Label>
-                        <Input
-                          value={newJournal.author}
-                          onChange={(e) => setNewJournal({ ...newJournal, author: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label>Category</Label>
-                        <Input
-                          value={newJournal.category}
-                          onChange={(e) => setNewJournal({ ...newJournal, category: e.target.value })}
-                        />
-                      </div>
-                      <Button onClick={handleAddJournal} className="w-full">Add Journal</Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                <h2 className="font-serif text-xl font-semibold">Published Journals</h2>
               </div>
 
               <Table>
@@ -343,7 +342,6 @@ const AdminDashboard = () => {
                     <TableHead>Author</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Published</TableHead>
-                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -353,19 +351,6 @@ const AdminDashboard = () => {
                       <TableCell>{journal.author}</TableCell>
                       <TableCell>{journal.category}</TableCell>
                       <TableCell>{journal.publishedDate}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            deleteJournal(journal.id);
-                            toast({ title: "Journal deleted" });
-                          }}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -389,6 +374,7 @@ const AdminDashboard = () => {
                       <TableHead>Submitted</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Assigned To</TableHead>
+                      <TableHead>Editor Report</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -413,6 +399,9 @@ const AdminDashboard = () => {
                         </TableCell>
                         <TableCell>
                           {sub.assignedTo ? editors.find(e => e.id === sub.assignedTo)?.name || "-" : "-"}
+                        </TableCell>
+                        <TableCell className="max-w-xs whitespace-pre-wrap text-sm text-muted-foreground">
+                          {sub.editorReport || "-"}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
@@ -610,6 +599,47 @@ const AdminDashboard = () => {
                       })}
                     />
                   </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-medium text-heading">Submission Notification Emails</h3>
+                <div>
+                  <Label>Common QuiLive Submission Email</Label>
+                  <Input
+                    type="email"
+                    value={editingSettings.submissionNotifications?.commonEmail || ""}
+                    onChange={(e) => setEditingSettings({
+                      ...editingSettings,
+                      submissionNotifications: {
+                        ...editingSettings.submissionNotifications,
+                        commonEmail: e.target.value,
+                        journalEmails: editingSettings.submissionNotifications?.journalEmails || {},
+                      },
+                    })}
+                  />
+                </div>
+                <div className="grid gap-4">
+                  {JOURNAL_NOTIFICATION_TITLES.map((title) => (
+                    <div key={title}>
+                      <Label>{title}</Label>
+                      <Input
+                        type="email"
+                        value={editingSettings.submissionNotifications?.journalEmails?.[title] || ""}
+                        onChange={(e) => setEditingSettings({
+                          ...editingSettings,
+                          submissionNotifications: {
+                            ...editingSettings.submissionNotifications,
+                            commonEmail: editingSettings.submissionNotifications?.commonEmail || "",
+                            journalEmails: {
+                              ...(editingSettings.submissionNotifications?.journalEmails || {}),
+                              [title]: e.target.value,
+                            },
+                          },
+                        })}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
 

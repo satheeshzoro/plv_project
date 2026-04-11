@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,7 +26,7 @@ SECRET_KEY = 'django-insecure-ycntwyyvw+-v2_fn$0+il4u=_@ix9%pj%-51mf5!*k%=#k)ax$
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "192.168.1.25"]
 
 
 # Application definition
@@ -59,27 +60,23 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    "http://localhost:8081",
-    "http://127.0.0.1:8081"
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    "http://localhost:8081",
-    "http://127.0.0.1:8081",
+
+"http://localhost:3000",
+  "http://127.0.0.1:3000"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
-
-CSRF_COOKIE_SAMESITE = "Strict"
 
 CORS_ALLOW_HEADERS = [
     "content-type",
     "authorization",
     "x-csrftoken",
+    "x-requested-with",
     "accept",
     "origin",
     "user-agent",
@@ -90,13 +87,18 @@ CORS_ALLOW_HEADERS = [
 # CORS_ALLOW_ALL_ORIGINS = True
 
 #csrf token settings
-CSRF_COOKIE_NAME="csrftoken"
-CSRF_USE_SESSIONS = True
-CSRF_COOKIE_SECURE = False # since not a https
-CSRF_TOKEN_HTTPONLY=True
-CSRF_COOKIE_SAMESITE = "Strict" 
+CSRF_COOKIE_NAME = "csrftoken"
+CSRF_USE_SESSIONS = False  # Recommendation: Set to False for easier SPA integration
+CSRF_COOKIE_SECURE = False # Set to True for HTTPS in production
+CSRF_COOKIE_HTTPONLY = False # Set to False if frontend needs to read the cookie
+CSRF_COOKIE_SAMESITE = "Lax" # Change from Strict to Lax for cross-origin local dev
+
+# Ensure CORS headers are sent even on error responses
+CORS_ALLOW_ALL_ORIGINS = False 
+
 
 ROOT_URLCONF = 'backend_project_folder.urls'
+WSGI_APPLICATION = 'backend_project_folder.wsgi.application'
 
 TEMPLATES = [
     {
@@ -114,7 +116,7 @@ TEMPLATES = [
 ]
 
 
-ASGI_APPLICATION = 'django_csrf.asgi.application'
+ASGI_APPLICATION = 'backend_project_folder.asgi.application'
 
 
 # Database
@@ -194,11 +196,12 @@ AUTHENTICATION_BACKENDS = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES':[
-        'rest_framework.authentication.SessionAuthentication'
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     
     'DEFAULT_PERMISSION_CLASSES':[
-        'rest_framework.permissions.AllowAny'
+        'rest_framework.permissions.IsAuthenticated'
     ]
 
 }
@@ -208,3 +211,11 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.BCryptSHA256PasswordHasher"
 ]
+
+EMAIL_BACKEND = os.getenv("DJANGO_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@quilivepublishers.local")

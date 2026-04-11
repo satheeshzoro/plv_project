@@ -1,4 +1,5 @@
 import { Instagram, Twitter, MessageCircle, Linkedin, Mail } from "lucide-react";
+import logoImage from "../../assets/logo.png";
 
 const FOOTER_LINKS = {
   Explore: [
@@ -38,49 +39,50 @@ const Footer = () => {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="bg-card border-t border-border">
-      {/* Main Footer */}
+    <footer className="border-t border-border bg-card">
       <div className="container py-12 md:py-16">
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-8 md:gap-12">
-          {/* Brand Column */}
+        <div className="grid grid-cols-2 gap-8 md:grid-cols-6 md:gap-12">
           <div className="col-span-2">
-            <a href="/" className="inline-block mb-4">
-              <span className="font-serif text-3xl font-bold text-primary">AJ</span>
+            <a href="/" className="brand-logo-lockup mb-4 inline-flex">
+              <span className="brand-logo-mark">
+                <img src={logoImage} alt="QuiLive logo" className="h-8 w-8 object-contain" />
+              </span>
+              <span>
+                <span className="block font-serif text-2xl font-semibold text-heading">QuiLive</span>
+                <span className="block text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
+                  Academic Hub
+                </span>
+              </span>
             </a>
-            <p className="text-muted-foreground text-sm leading-relaxed mb-6 max-w-xs">
-              Advancing knowledge through peer-reviewed research and academic excellence since 2020.
+            <p className="mb-6 max-w-xs text-sm leading-relaxed text-muted-foreground">
+              Open-access publishing with one connected experience for authors, editors, and administrators.
             </p>
-            
-            {/* Newsletter */}
+
             <div className="space-y-3">
               <label className="text-sm font-medium text-foreground">Stay Updated</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="email"
                     placeholder="Enter your email"
-                    className="w-full pl-10 pr-4 py-2.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-smooth"
+                    className="w-full rounded-lg border border-border bg-background py-2.5 pl-10 pr-4 text-sm transition-smooth focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
-                <button className="px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-lg transition-smooth">
+                <button className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-smooth hover:bg-primary/90">
                   Subscribe
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Link Columns */}
           {Object.entries(FOOTER_LINKS).map(([title, links]) => (
             <div key={title}>
-              <h4 className="font-medium text-foreground mb-4">{title}</h4>
+              <h4 className="mb-4 font-medium text-foreground">{title}</h4>
               <ul className="space-y-3">
                 {links.map(({ label, href }) => (
                   <li key={label}>
-                    <a
-                      href={href}
-                      className="text-sm text-muted-foreground hover:text-primary transition-smooth"
-                    >
+                    <a href={href} className="text-sm text-muted-foreground transition-smooth hover:text-primary">
                       {label}
                     </a>
                   </li>
@@ -91,14 +93,12 @@ const Footer = () => {
         </div>
       </div>
 
-      {/* Bottom Bar */}
       <div className="border-t border-border">
-        <div className="container py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground text-center sm:text-left">
-            © {currentYear} QUILIVE. All rights reserved.
+        <div className="container flex flex-col items-center justify-between gap-4 py-6 sm:flex-row">
+          <p className="text-center text-sm text-muted-foreground sm:text-left">
+            Copyright {currentYear} QuiLive. All rights reserved.
           </p>
-          
-          {/* Social Links */}
+
           <div className="flex items-center gap-1">
             {SOCIAL_LINKS.map(({ icon: Icon, href, label }) => (
               <a
@@ -106,10 +106,10 @@ const Footer = () => {
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-2 text-muted-foreground hover:text-primary transition-smooth rounded-lg hover:bg-secondary"
+                className="rounded-lg p-2 text-muted-foreground transition-smooth hover:bg-secondary hover:text-primary"
                 aria-label={label}
               >
-                <Icon className="w-5 h-5" />
+                <Icon className="h-5 w-5" />
               </a>
             ))}
           </div>

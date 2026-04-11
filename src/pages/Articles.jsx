@@ -1,26 +1,307 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Search, ArrowLeft, Download, Clock } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  BookOpen,
+  Download,
+  FileCheck,
+  FileClock,
+  FolderArchive,
+  DownloadCloud,
+  Send,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
+import { ARTICLE_TYPES, JOURNAL_OPTIONS as JOURNAL_TYPES } from "@/data/journalOptions";
+
+const getFullUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  const backend = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+  if (url.startsWith("/media")) return `${backend}${url}`;
+  const path = url.startsWith("/") ? url : `/${url}`;
+  return `${backend}/media${path}`;
+};
+
+const inferArticleType = (article) => {
+  const title = article.title?.toLowerCase() || "";
+  if (title.includes("review")) return "Review Article";
+  if (title.includes("case")) return "Case Study";
+  if (title.includes("report")) return "Technical Report";
+  if (title.includes("communication")) return "Short Communication";
+  return "Research Paper";
+};
+
+const sortByDateDesc = (articles) =>
+  [...articles].sort((a, b) => new Date(b.publishedDate || 0) - new Date(a.publishedDate || 0));
+
+const DownloadList = ({ articles, onDownload, emptyMessage }) => {
+  if (!articles.length) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-background p-8 text-center text-muted-foreground">
+        {emptyMessage}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {articles.map((article) => (
+        <div
+          key={article.id}
+          className="flex flex-col gap-4 rounded-xl border border-border bg-background p-5 md:flex-row md:items-center md:justify-between"
+        >
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+                {article.articleType}
+              </span>
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                {article.category}
+              </span>
+              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                {article.readTime}
+              </span>
+              <span className="rounded-full bg-accent/10 px-3 py-1 text-xs font-medium text-foreground">
+                {article.downloads || 0} download{article.downloads === 1 ? "" : "s"}
+              </span>
+            </div>
+            <h3 className="font-serif text-xl font-semibold text-heading">{article.title}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              By {article.author} {article.publishedDate ? `- ${article.publishedDate}` : ""}
+            </p>
+          </div>
+
+          <Button variant="outline" onClick={() => onDownload(article)} className="md:shrink-0">
+            <Download className="mr-2 h-4 w-4" />
+            Download
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const Articles = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
-  const { journals, currentUser, logoutUser, recordArticleDownload } = useAppData();
-  const [searchQuery, setSearchQuery] = useState("");
+  const { journals, editors, currentUser, logoutUser, recordArticleDownload } = useAppData();
+  const [activeTab, setActiveTab] = useState("about");
+  const [selectedArticleType, setSelectedArticleType] = useState("all");
 
-  const filteredArticles = journals.filter((article) =>
-    article.title.toLowerCase().includes(searchQuery.toLowerCase())
+  const journalIdFromUrl = searchParams.get("journal") || "";
+
+  const normalizedArticles = useMemo(
+    () =>
+      journals.map((article) => ({
+        ...article,
+        articleType: article.articleType || inferArticleType(article),
+      })),
+    [journals],
   );
+
+  const selectedJournal = useMemo(
+    () => JOURNAL_TYPES.find((journal) => journal.id === journalIdFromUrl) || null,
+    [journalIdFromUrl],
+  );
+
+  const filteredEditors = useMemo(() => {
+    if (!selectedJournal) return editors;
+    return editors.filter(
+      (editor) => editor.mappedJournalCategory === selectedJournal.category,
+    );
+  }, [editors, selectedJournal]);
+
+  const journalArticles = useMemo(() => {
+    if (!selectedJournal) return [];
+
+    const filtered = normalizedArticles.filter((article) => article.journalName === selectedJournal.title);
+    if (selectedArticleType === "all") return sortByDateDesc(filtered);
+    return sortByDateDesc(filtered.filter((article) => article.articleType === selectedArticleType));
+  }, [normalizedArticles, selectedJournal, selectedArticleType]);
+
+  const articlesInPress = journalArticles.slice(0, 3);
+  const currentIssue = journalArticles.slice(0, 6);
+  const archive = journalArticles;
+  const journalDownloadCount = useMemo(
+    () => journalArticles.reduce((total, article) => total + (article.downloads || 0), 0),
+    [journalArticles],
+  );
+
+  useEffect(() => {
+    const categoryFromUrl = searchParams.get("category");
+    if (!journalIdFromUrl && categoryFromUrl) {
+      const matchedJournal = JOURNAL_TYPES.find((journal) => journal.category === categoryFromUrl);
+      if (matchedJournal) {
+        setSearchParams({ journal: matchedJournal.id });
+      }
+    }
+  }, [journalIdFromUrl, searchParams, setSearchParams]);
+
+  const handleDownload = async (article) => {
+    await recordArticleDownload(article.id);
+    const fileUrl = getFullUrl(article.file);
+    if (fileUrl) {
+      window.open(fileUrl, "_blank", "noopener,noreferrer");
+    }
+    toast({
+      title: "Download Started",
+      description: `Downloading ${article.title}.pdf`,
+    });
+  };
+
+  const handleSubmit = () => {
+    if (!selectedJournal) return;
+
+    const params = new URLSearchParams();
+    params.set("journalType", selectedJournal.category);
+    params.set("journalName", selectedJournal.title);
+    if (selectedArticleType !== "all") {
+      params.set("articleType", selectedArticleType);
+    }
+
+    const target = currentUser ? "/publish" : "/submit-and-register";
+    navigate(`${target}?${params.toString()}`);
+  };
+
+  const renderTabContent = () => {
+    if (!selectedJournal) return null;
+
+    if (activeTab === "about") {
+      return (
+        <div className="rounded-r-xl border border-l-0 border-border bg-card p-8 leading-8 text-muted-foreground">
+          <p>{selectedJournal.about}</p>
+          <p className="mt-6">
+            This journal is designed to support high-impact scholarly communication, strong editorial oversight,
+            and accessible publication pathways for authors working in {selectedJournal.category.toLowerCase()}.
+          </p>
+          <div className="mt-8">
+            <h3 className="font-serif text-2xl font-semibold text-heading">Journal Highlights</h3>
+            <ul className="mt-4 space-y-3 text-foreground">
+              <li>Peer-reviewed and scope-focused editorial evaluation</li>
+              <li>Downloadable article archive and current issue access</li>
+              <li>Direct submission path for authors in this journal type</li>
+            </ul>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === "editorial-board") {
+      return (
+        <div className="rounded-r-xl border border-l-0 border-border bg-card p-8">
+          <div className="mb-6 flex items-center gap-2 text-primary">
+            <Users className="h-5 w-5" />
+            <span className="text-sm font-medium uppercase tracking-wide">Editorial Board</span>
+          </div>
+          {filteredEditors.length ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {filteredEditors.map((editor) => (
+                <div key={editor.id} className="rounded-xl border border-border bg-background p-5">
+                  <h3 className="font-serif text-xl font-semibold text-heading">{editor.name}</h3>
+                  <p className="mt-1 text-sm text-primary">{editor.penName || "Editorial Board Member"}</p>
+                  <p className="mt-3 text-sm text-muted-foreground">{editor.email || "No email available"}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{editor.country || "Country not provided"}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-background p-8 text-center text-muted-foreground">
+              No editors are mapped to this journal category yet.
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (activeTab === "articles-in-press") {
+      return (
+        <div className="rounded-r-xl border border-l-0 border-border bg-card p-8">
+          <DownloadList
+            articles={articlesInPress}
+            onDownload={handleDownload}
+            emptyMessage="No article in press data available for this journal."
+          />
+        </div>
+      );
+    }
+
+    if (activeTab === "current-issue") {
+      return (
+        <div className="rounded-r-xl border border-l-0 border-border bg-card p-8">
+          <DownloadList
+            articles={currentIssue}
+            onDownload={handleDownload}
+            emptyMessage="No current issue articles available for this journal."
+          />
+        </div>
+      );
+    }
+
+    if (activeTab === "archive") {
+      return (
+        <div className="rounded-r-xl border border-l-0 border-border bg-card p-8">
+          <DownloadList
+            articles={archive}
+            onDownload={handleDownload}
+            emptyMessage="No archive articles available for this journal."
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-r-xl border border-l-0 border-border bg-card p-8">
+        <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div>
+            <div className="mb-3 flex items-center gap-2 text-primary">
+              <FileCheck className="h-5 w-5" />
+              <span className="text-sm font-medium uppercase tracking-wide">Submit Manuscript</span>
+            </div>
+            <h3 className="font-serif text-2xl font-semibold text-heading">{selectedJournal.title}</h3>
+            <p className="mt-3 text-muted-foreground">
+              Select the article type and continue to the submission form for this journal category.
+            </p>
+            <div className="mt-5 max-w-sm">
+              <Select value={selectedArticleType} onValueChange={setSelectedArticleType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select article type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Choose on form</SelectItem>
+                  {ARTICLE_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <Button size="lg" onClick={handleSubmit}>
+            <Send className="mr-2 h-4 w-4" />
+            Continue To Submit
+          </Button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar 
+      <Navbar
         isLoggedIn={!!currentUser}
         user={currentUser}
         onSignIn={() => navigate("/")}
@@ -29,89 +310,155 @@ const Articles = () => {
           logoutUser();
           navigate("/");
         }}
+        submitPath={currentUser ? "/publish" : "/submit-and-register"}
       />
 
-      <main className="py-12 md:py-16">
-        <div className="container">
-          {/* Back Link */}
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-smooth mb-8"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Home
-          </Link>
-
-          {/* Page Header */}
-          <div className="mb-10">
-            <h1 className="font-serif text-3xl md:text-4xl lg:text-5xl font-bold text-heading mb-4">
-              All Articles
-            </h1>
-            <p className="text-muted-foreground text-lg max-w-2xl">
-              Browse our collection of peer-reviewed articles and research papers from scholars worldwide.
-            </p>
+      <main>
+        <section className="bg-[linear-gradient(135deg,#243342,#2d3d49)] py-10 text-white">
+          <div className="container">
+            <div className="text-sm">
+              <Link to="/" className="hover:text-white/80">
+                Home
+              </Link>
+              <span className="mx-3">&gt;</span>
+              {selectedJournal ? (
+                <span>{selectedJournal.title}</span>
+              ) : (
+                <span>Journals</span>
+              )}
+            </div>
           </div>
+        </section>
 
-          {/* Search Bar */}
-          <div className="relative max-w-xl mb-10">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search articles by title..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-12 py-6 text-base border-border bg-card"
-            />
-          </div>
+        <section className="py-12 md:py-16">
+          <div className="container">
+            {!selectedJournal ? (
+              <>
+                <div className="mb-12 text-center">
+                  <h1 className="font-serif text-4xl font-bold text-heading md:text-5xl">QuiLive Publishers</h1>
+                </div>
 
-          {/* Articles List */}
-          <div className="space-y-4">
-            {filteredArticles.length > 0 ? (
-              filteredArticles.map((article) => (
-                <div
-                  key={article.id}
-                  className="flex items-center justify-between p-4 md:p-6 bg-card border border-border rounded-lg hover:shadow-elegant transition-smooth"
-                >
-                  <div className="flex-1 min-w-0">
-                    <span className="inline-block px-2 py-1 text-xs font-medium bg-secondary text-secondary-foreground rounded mb-2">
-                      {article.category}
-                    </span>
-                    <h3 className="font-serif text-lg md:text-xl font-semibold text-heading truncate">
-                      {article.title}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
-                      <span>By {article.author}</span>
-                      <span className="hidden sm:inline w-1 h-1 bg-muted-foreground/40 rounded-full" />
-                      <span>{article.date || article.publishedDate}</span>
-                      <span className="hidden sm:inline w-1 h-1 bg-muted-foreground/40 rounded-full" />
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        <span>{article.readTime}</span>
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {JOURNAL_TYPES.map((journal) => (
+                    <button
+                      key={journal.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("about");
+                        setSearchParams({ journal: journal.id });
+                      }}
+                      className="text-left transition-smooth hover:-translate-y-1"
+                    >
+                      <div className="overflow-hidden rounded-sm">
+                        <img
+                          src={journal.image}
+                          alt={journal.title}
+                          className="h-[190px] w-full object-cover"
+                        />
                       </div>
+                      <h2 className="px-3 py-3 text-center font-serif text-lg font-semibold text-heading">
+                        {journal.title}
+                      </h2>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-8 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("about");
+                      setSelectedArticleType("all");
+                      setSearchParams({});
+                    }}
+                    className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-smooth"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Journals
+                  </button>
+                </div>
+
+                <div className="mb-8 rounded-xl overflow-hidden">
+                  <img
+                    src={selectedJournal.image}
+                    alt={selectedJournal.title}
+                    className="h-[220px] w-full object-cover"
+                  />
+                </div>
+
+                <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h1 className="font-serif text-3xl font-bold text-heading md:text-4xl">{selectedJournal.title}</h1>
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <BookOpen className="h-4 w-4" />
+                        {selectedJournal.category}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <FolderArchive className="h-4 w-4" />
+                        {archive.length} article{archive.length === 1 ? "" : "s"}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <DownloadCloud className="h-4 w-4" />
+                        {journalDownloadCount} total download{journalDownloadCount === 1 ? "" : "s"}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <FileClock className="h-4 w-4" />
+                        Quarterly Publication Flow
+                      </span>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    className="ml-4 shrink-0"
-                    onClick={() => {
-                      recordArticleDownload(article.id);
-                      toast({ title: "Download Started", description: `Downloading ${article.title}.pdf` });
-                    }}
-                  >
-                    <Download className="mr-2 w-4 h-4" />
-                    Download PDF
-                  </Button>
+
+                  <div className="w-full max-w-xs">
+                    <Select value={selectedArticleType} onValueChange={setSelectedArticleType}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter article type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Article Types</SelectItem>
+                        {ARTICLE_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground text-lg">
-                  No articles found matching "{searchQuery}"
-                </p>
-              </div>
+
+                <div className="grid gap-6 lg:grid-cols-[280px_1fr] lg:items-start">
+                  <div className="rounded-2xl border border-border bg-card p-3 shadow-soft">
+                    {[
+                      ["about", "About Journal"],
+                      ["editorial-board", "Editorial Board"],
+                      ["articles-in-press", "Article in Press"],
+                      ["current-issue", "Current Issue"],
+                      ["archive", "Archive"],
+                      ["submit-manuscript", "Submit Manuscript"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setActiveTab(value)}
+                        className={`mb-2 flex w-full items-center rounded-xl border px-5 py-4 text-left text-base transition-smooth last:mb-0 ${
+                          activeTab === value
+                            ? "border-primary bg-primary text-primary-foreground shadow-soft"
+                            : "border-border bg-background text-foreground hover:border-primary/40 hover:bg-secondary"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {renderTabContent()}
+                </div>
+              </>
             )}
           </div>
-        </div>
+        </section>
       </main>
 
       <Footer />

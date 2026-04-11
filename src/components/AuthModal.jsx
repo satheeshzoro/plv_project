@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
+import { extractApiError, normalizeEmail, normalizeText } from "@/lib/api";
+import logoImage from "../../assets/logo.png";
+import mainImage from "../../assets/main.png";
 
 const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
   const { toast } = useToast();
@@ -26,9 +29,21 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
 
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+      const payload = {
+        name: normalizeText(formData.name),
+        email: normalizeEmail(formData.email),
+        password: formData.password,
+      };
+
+      if (!payload.email || !payload.password || (isSignUp && !payload.name)) {
+        throw new Error("Please fill in all required fields.");
+      }
       
       // 1. Fetch CSRF Token FIRST
       const csrfResponse = await fetch(`${backendUrl}/api/csrf/`, { credentials: "include" });
+      if (!csrfResponse.ok) {
+        throw new Error("Unable to reach the authentication service. Please try again.");
+      }
       const csrfData = await csrfResponse.json();
       const csrfToken = csrfData.csrfToken;
       
@@ -44,16 +59,16 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
             "X-CSRFToken": csrfToken || "",
           },
           body: JSON.stringify({
-            email: formData.email,
-            full_name: formData.name,
-            password: formData.password,
+            email: payload.email,
+            full_name: payload.name,
+            password: payload.password,
           }),
           credentials: "include",
         });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.detail || "Registration failed");
+          throw new Error(extractApiError(errorData, "Registration failed"));
         }
 
         toast({
@@ -71,15 +86,15 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
             "X-CSRFToken": csrfToken || "",
           },
           body: JSON.stringify({
-            email: formData.email,
-            password: formData.password,
+            email: payload.email,
+            password: payload.password,
           }),
           credentials: "include",
         });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.detail || "Login failed. Please check your credentials.");
+          throw new Error(extractApiError(errorData, "Login failed. Please check your credentials."));
         }
 
         const data = await response.json();
@@ -105,7 +120,7 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
         await checkAuth();
         
         // Pass user data to parent (handle variations in API response fields)
-        const userData = { ...data, username: data.full_name || data.name || data.username || formData.email.split('@')[0] };
+        const userData = { ...data, username: data.full_name || data.name || data.username || payload.email.split('@')[0] };
         onSuccess(userData);
         onClose();
       }
@@ -134,7 +149,35 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-md surface-elevated rounded-2xl shadow-soft-lg p-6 md:p-8 animate-slide-up border border-border/50">
+      <div className="relative w-full max-w-4xl overflow-hidden rounded-[2rem] border border-border/50 bg-card shadow-soft-lg animate-slide-up md:grid md:grid-cols-[0.95fr_1.05fr]">
+        <div className="relative hidden overflow-hidden bg-[linear-gradient(180deg,rgba(17,55,59,0.98),rgba(32,96,97,0.88))] p-8 text-white md:flex md:flex-col md:justify-between">
+          <div className="absolute inset-0 brand-subtle-grid opacity-20" />
+          <div className="relative">
+            <div className="brand-logo-lockup">
+              <span className="brand-logo-mark border-white/15 bg-white/95">
+                <img src={logoImage} alt="QuiLive logo" className="h-8 w-8 object-contain" />
+              </span>
+              <span>
+                <span className="block font-serif text-2xl font-semibold">QuiLive</span>
+                <span className="block text-[11px] uppercase tracking-[0.28em] text-white/70">
+                  Academic Hub
+                </span>
+              </span>
+            </div>
+            <h3 className="mt-10 font-serif text-4xl font-semibold leading-tight">
+              {isSignUp ? "Create your author account and start publishing." : "Continue into your role-based workspace."}
+            </h3>
+            <p className="mt-4 max-w-sm text-sm leading-6 text-white/76">
+              Editors and admins use the same entry point. Access changes automatically after authentication.
+            </p>
+          </div>
+
+          <div className="brand-image-frame border-white/10 bg-white/10 p-4">
+            <img src={mainImage} alt="QuiLive workspace illustration" className="w-full object-contain" />
+          </div>
+        </div>
+
+        <div className="relative p-6 md:p-8">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -145,14 +188,18 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
 
         {/* Header */}
         <div className="text-center mb-8">
-          <span className="font-serif text-3xl font-bold text-primary">AJ</span>
+          <span className="brand-logo-lockup justify-center">
+            <span className="brand-logo-mark">
+              <img src={logoImage} alt="QuiLive logo" className="h-8 w-8 object-contain" />
+            </span>
+          </span>
           <h2 className="font-serif text-2xl font-bold text-heading mt-4 mb-2">
             {isSignUp ? "Create Your Account" : "Welcome Back"}
           </h2>
           <p className="text-muted-foreground text-sm">
             {isSignUp
               ? "Join our community of researchers and scholars"
-              : "Sign in to continue to QUILIVE"}
+              : "Sign in to continue to QuiLive"}
           </p>
         </div>
 
@@ -270,6 +317,7 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
             {isSignUp ? "Sign In" : "Sign Up"}
           </button>
         </p>
+        </div>
       </div>
     </div>
   );

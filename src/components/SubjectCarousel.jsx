@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/ThemeContext";
+import { useAppData } from "@/context/AppDataContext";
+import { JOURNAL_OPTIONS } from "@/data/journalOptions";
 import {
   Carousel,
   CarouselContent,
@@ -10,59 +11,17 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 
-const SUBJECTS = [
-  {
-    id: 1,
-    name: "Computer Science",
-    image: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=300&fit=crop",
-    articleCount: 1234,
-  },
-  {
-    id: 2,
-    name: "Medical Sciences",
-    image: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=400&h=300&fit=crop",
-    articleCount: 2156,
-  },
-  {
-    id: 3,
-    name: "Business & Economics",
-    image: "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=400&h=300&fit=crop",
-    articleCount: 987,
-  },
-  {
-    id: 4,
-    name: "Humanities",
-    image: "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=400&h=300&fit=crop",
-    articleCount: 1567,
-  },
-  {
-    id: 5,
-    name: "Engineering",
-    image: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=300&fit=crop",
-    articleCount: 1890,
-  },
-  {
-    id: 6,
-    name: "Environmental Science",
-    image: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=400&h=300&fit=crop",
-    articleCount: 756,
-  },
-  {
-    id: 7,
-    name: "Physics",
-    image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400&h=300&fit=crop",
-    articleCount: 1123,
-  },
-  {
-    id: 8,
-    name: "Psychology",
-    image: "https://images.unsplash.com/photo-1559757175-5700dde675bc?w=400&h=300&fit=crop",
-    articleCount: 1432,
-  },
-];
-
 const SubjectCarousel = () => {
   const { isDark } = useTheme();
+  const { journals } = useAppData();
+
+  const subjects = JOURNAL_OPTIONS.map((journal, index) => ({
+    id: index + 1,
+    name: journal.title,
+    image: journal.image,
+    articleCount: journals.filter((article) => article.journalName === journal.title).length,
+    journalId: journal.id,
+  }));
 
   return (
     <section
@@ -88,9 +47,9 @@ const SubjectCarousel = () => {
           className="w-full"
         >
           <CarouselContent className="-ml-2 md:-ml-4">
-            {SUBJECTS.map((subject) => (
+            {subjects.map((subject) => (
               <CarouselItem key={subject.id} className="pl-2 md:pl-4 basis-1/2 md:basis-1/3 lg:basis-1/4">
-                <Link to={`/journals?category=${encodeURIComponent(subject.name)}`}>
+                <Link to={`/journals?journal=${encodeURIComponent(subject.journalId)}`}>
                   <div className="group relative overflow-hidden rounded-xl aspect-[4/3] cursor-pointer">
                     {/* Image */}
                     <img
