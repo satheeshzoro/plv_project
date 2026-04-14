@@ -142,7 +142,7 @@ DATABASES = {
         'NAME': 'PLV_database',               # Replace with your DB name
         'USER': 'postgres',                # Replace with your DB user
         'PASSWORD': '26062004',                # Replace with your DB password
-        'HOST': 'localhost',                        # Or your DB server IP/domain
+        'HOST': 'host.docker.internal',                        # Or your DB server IP/domain
         'PORT': '5432',                             # Default PostgreSQL port
     }
 }
