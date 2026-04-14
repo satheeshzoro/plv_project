@@ -32,9 +32,6 @@ def get_profile_image_url(request, user):
         return None
 
 
-def editor_profile_image_missing(user):
-    return getattr(user, "role", "").upper() == "EDITOR" and not bool(getattr(user, "profile_image", None))
-
 # ==============================================================================
 # AUTHENTICATION VIEWS
 # ==============================================================================
@@ -180,11 +177,6 @@ class AssignEditorAPIView(APIView):
 class EditorTasksAPIView(APIView):
     permission_classes = [IsEditor]
     def get(self, request):
-        if editor_profile_image_missing(request.user):
-            return Response(
-                {"detail": "Profile image is required. Upload an image between 64x64 and 500x500 pixels to continue."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         articles = Article.objects.filter(assigned_to=request.user)
         if request.user.mapped_journal_category:
             articles = articles.filter(category=request.user.mapped_journal_category)
@@ -289,11 +281,6 @@ class UpdateSubmissionStatusAPIView(APIView):
         editor_report = (request.data.get("editor_report") or "").strip()
 
         if request.user.role == "EDITOR":
-            if editor_profile_image_missing(request.user):
-                return Response(
-                    {"error": "Profile image is required before reviewing submissions."},
-                    status=403,
-                )
             if article.assigned_to != request.user:
                 return Response({"error": "Not your assigned article"}, status=403)
 
@@ -502,11 +489,6 @@ class DashboardAnalyticsAPIView(APIView):
     def get(self, request):
         if request.user.role not in ["ADMIN", "EDITOR"]:
             return Response({"detail": "Only admin or editor can access analytics."}, status=403)
-        if request.user.role == "EDITOR" and editor_profile_image_missing(request.user):
-            return Response(
-                {"detail": "Profile image is required before accessing editor analytics."},
-                status=403,
-            )
 
         now = timezone.now()
         year_param = request.query_params.get("year")

@@ -1,11 +1,11 @@
 services:
   backend:
-    # Change this path to match exactly where your manage.py and Dockerfile are
     build: ./backend/backend_project_folder
     volumes:
       - ./backend/backend_project_folder:/app/backend
-    ports:
-      - "8000:8000"
+    # We remove ports here so nobody can bypass Nginx
+    expose:
+      - "8000"
     environment:
       - DB_HOST=host.docker.internal
     extra_hosts:
@@ -16,6 +16,28 @@ services:
     volumes:
       - ./frontend:/app/frontend
       - /app/frontend/node_modules
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     stdin_open: true
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    restart: always
+    depends_on:
+      - backend
+      - frontend
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    # This loop checks for renewal every 12 hours
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"

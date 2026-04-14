@@ -41,9 +41,21 @@ const EditorCarouselSection = () => {
                 <CarouselItem key={editor.id} className="md:basis-1/2 xl:basis-1/3">
                   <div className="h-full rounded-2xl border border-border bg-card p-6">
                     <div className="flex items-center gap-4">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-2xl font-semibold text-primary">
-                        {editor.name?.trim()?.charAt(0)?.toUpperCase() || "E"}
-                      </div>
+                      {editor.profileImage ? (
+                        <img
+                          src={editor.profileImage}
+                          alt={`${editor.name || "Editor"} profile`}
+                          className="h-16 w-16 rounded-full border border-border object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-2xl font-semibold text-primary">
+                            {editor.name?.trim()?.charAt(0)?.toUpperCase() || "E"}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">Image is not available</p>
+                        </div>
+                      )}
                       <div className="min-w-0">
                         <h3 className="truncate font-serif text-xl font-semibold text-heading">
                           {editor.name || "Editor"}

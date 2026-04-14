@@ -6,6 +6,7 @@ import SubmissionProcessSection from "@/components/SubmissionProcessSection";
 import EditorCarouselSection from "@/components/EditorCarouselSection";
 import TrendingArticles from "@/components/TrendingArticles";
 import SubjectCarousel from "@/components/SubjectCarousel";
+import IndexedInSection from "@/components/IndexedInSection";
 import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
 import { useAppData } from "@/context/AppDataContext";
@@ -88,6 +89,7 @@ const Index = () => {
         <EditorCarouselSection />
         <TrendingArticles />
         <SubjectCarousel />
+        <IndexedInSection />
       </main>
       
       <Footer />

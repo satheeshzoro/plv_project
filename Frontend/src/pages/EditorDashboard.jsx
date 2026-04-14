@@ -8,6 +8,7 @@ import {
   Clock,
   Newspaper,
   LineChart as LineChartIcon,
+  UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   LineChart,
   Line,
@@ -79,6 +86,9 @@ const EditorDashboard = () => {
     dashboardAnalytics,
     fetchDashboardAnalytics,
     fetchSubmissions,
+    fetchProfileSummary,
+    updateProfileSummary,
+    profileSummary,
   } = useAppData();
 
   const [profileImageFile, setProfileImageFile] = useState(null);
@@ -87,6 +97,16 @@ const EditorDashboard = () => {
     year: String(new Date().getFullYear()),
     month: "all",
   });
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    full_name: "",
+    email: "",
+    whatsapp: "",
+    pen_name: "",
+    country: "",
+  });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileImagePreview, setProfileImagePreview] = useState("");
 
   if (isAuthChecking) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -97,48 +117,9 @@ const EditorDashboard = () => {
   }
 
   if (!currentEditor) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/editor/login" replace />;
   }
 
-  if (currentEditor.requiresProfileImage) {
-    return (
-      <div className="dashboard-shell min-h-screen">
-        <header className="brand-topbar sticky top-0 z-50 border-b border-border">
-          <div className="container flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
-              <span className="brand-logo-mark">
-                <img src={logoImage} alt="QuiLive logo" className="h-8 w-8 object-contain" />
-              </span>
-              <span className="text-muted-foreground">Editor Panel</span>
-            </div>
-            <Button variant="ghost" onClick={handleLogout} className="text-destructive">
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </Button>
-          </div>
-        </header>
-        <main className="container py-10">
-          <div className="mx-auto max-w-xl rounded-xl border border-border bg-card p-6 md:p-8">
-            <h1 className="font-serif text-2xl font-semibold text-heading">Complete your editor profile</h1>
-            <p className="mt-3 text-muted-foreground">
-              Your first editor login requires a profile image before continuing.
-              Upload an image between 64 x 64 and 500 x 500 pixels, at most 1.5 MB.
-            </p>
-            <div className="mt-6 space-y-4">
-              <Input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setProfileImageFile(e.target.files?.[0] || null)}
-              />
-              <Button onClick={handleMandatoryProfileImageUpload} disabled={isUploadingProfileImage}>
-                {isUploadingProfileImage ? "Uploading..." : "Upload And Continue"}
-              </Button>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
 
   const editorStats = getEditorStats(currentEditor.id);
   const myTasks = submissions.filter((s) => Number(s.assignedTo) === Number(currentEditor.id));
@@ -168,53 +149,59 @@ const EditorDashboard = () => {
     });
   }
 
-  async function handleMandatoryProfileImageUpload() {
-    if (!profileImageFile) {
-      toast({
-        title: "Image required",
-        description: "Please select an image between 64 x 64 and 500 x 500 pixels.",
-        variant: "destructive",
+  const openProfile = async () => {
+    const data = await fetchProfileSummary().catch(() => null);
+    if (data) {
+      setProfileForm({
+        full_name: data.full_name || "",
+        email: data.email || "",
+        whatsapp: data.whatsapp || "",
+        pen_name: data.pen_name || "",
+        country: data.country || "",
       });
-      return;
+      setProfileImagePreview(data.profile_image || "");
+      setProfileImageFile(null);
     }
+    setIsProfileOpen(true);
+  };
 
-    if (profileImageFile.size > 1.5 * 1024 * 1024) {
-      toast({
-        title: "Image too large",
-        description: "Image size must be at most 1.5 MB.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const handleSaveProfile = async () => {
+    setIsSavingProfile(true);
     try {
-      const { width, height } = await getImageDimensions(profileImageFile);
-      if (width < 64 || height < 64 || width > 500 || height > 500) {
-        toast({
-          title: "Invalid image size",
-          description: "Editor image must be between 64 x 64 and 500 x 500 pixels.",
-          variant: "destructive",
-        });
-        return;
+      if (profileImageFile) {
+        if (profileImageFile.size > 1.5 * 1024 * 1024) {
+          throw new Error("Image size must be at most 1.5 MB.");
+        }
+
+        const { width, height } = await getImageDimensions(profileImageFile);
+        if (width < 64 || height < 64 || width > 500 || height > 500) {
+          throw new Error("Editor image must be between 64 x 64 and 500 x 500 pixels.");
+        }
+
+        setIsUploadingProfileImage(true);
+        const uploadResult = await uploadEditorProfileImage(profileImageFile);
+        setProfileImagePreview(uploadResult.profile_image || "");
+        setProfileImageFile(null);
       }
 
-      setIsUploadingProfileImage(true);
-      await uploadEditorProfileImage(profileImageFile);
-      setProfileImageFile(null);
+      await updateProfileSummary(profileForm);
       toast({
         title: "Profile updated",
-        description: "Your editor image has been uploaded successfully.",
+        description: "Your profile details were saved successfully.",
       });
+      setIsProfileOpen(false);
     } catch (error) {
       toast({
-        title: "Upload failed",
-        description: error.message || "Unable to upload profile image.",
+        title: "Profile update failed",
+        description: error.message || "Unable to update profile right now.",
         variant: "destructive",
       });
     } finally {
       setIsUploadingProfileImage(false);
+      setIsSavingProfile(false);
     }
-  }
+  };
+
 
   const handleFetchAnalytics = () => {
     fetchDashboardAnalytics({
@@ -253,6 +240,10 @@ const EditorDashboard = () => {
             <span className="text-sm text-muted-foreground">
               Welcome, {currentEditor.name}
             </span>
+            <Button variant="outline" onClick={openProfile}>
+              <UserRound className="w-4 h-4 mr-2" />
+              Profile
+            </Button>
             <Button variant="ghost" onClick={handleLogout} className="text-destructive">
               <LogOut className="w-4 h-4 mr-2" />
               Logout
@@ -526,6 +517,89 @@ const EditorDashboard = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <Dialog open={isProfileOpen} onOpenChange={setIsProfileOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editor Profile</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <div className="grid gap-2">
+              <Label htmlFor="profile-name">Name</Label>
+              <Input
+                id="profile-name"
+                value={profileForm.full_name}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, full_name: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="profile-email">Email</Label>
+              <Input
+                id="profile-email"
+                type="email"
+                value={profileForm.email}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="profile-phone">Phone</Label>
+              <Input
+                id="profile-phone"
+                value={profileForm.whatsapp}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, whatsapp: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="profile-pen-name">Pen Name</Label>
+              <Input
+                id="profile-pen-name"
+                value={profileForm.pen_name}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, pen_name: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="profile-country">Country</Label>
+              <Input
+                id="profile-country"
+                value={profileForm.country}
+                onChange={(e) => setProfileForm((prev) => ({ ...prev, country: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="profile-image">Profile Image (optional)</Label>
+              {profileImagePreview ? (
+                <img
+                  src={profileImagePreview}
+                  alt="Editor profile"
+                  className="h-16 w-16 rounded-full border border-border object-cover"
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">Image is not available</p>
+              )}
+              <Input
+                id="profile-image"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setProfileImageFile(file);
+                  if (file) {
+                    const objectUrl = URL.createObjectURL(file);
+                    setProfileImagePreview(objectUrl);
+                  }
+                }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3 rounded-md border border-border p-3">
+              <div><span className="font-medium">Total Submissions:</span> {profileSummary?.total_submissions ?? 0}</div>
+              <div><span className="font-medium">Published:</span> {profileSummary?.published_submissions ?? 0}</div>
+            </div>
+            <Button onClick={handleSaveProfile} disabled={isSavingProfile || isUploadingProfileImage} className="w-full">
+              {isSavingProfile || isUploadingProfileImage ? "Saving..." : "Save Profile"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
