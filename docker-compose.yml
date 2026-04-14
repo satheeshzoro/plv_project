@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/app/backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Use "host.docker.internal" to reach your local Postgres
+      - DB_HOST=host.docker.internal
+      - DB_NAME=your_local_db_name
+      - DB_USER=your_local_user
+      - DB_PASS=your_local_password
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build: ./frontend
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    depends_on:
+      - backend
