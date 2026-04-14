@@ -12,6 +12,9 @@ djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
 PyJWT==2.10.1
 
+# Image Processing (Fixes the PIL error)
+Pillow==10.3.0
+
 # Production Server & Utils
 asgiref==3.10.0
 uvicorn==0.30.3
