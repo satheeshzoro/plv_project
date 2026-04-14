@@ -11,6 +11,8 @@ import {
   Plus,
   Trash2,
   UserPlus,
+  LineChart as LineChartIcon,
+  Newspaper,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +34,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
 import logoImage from "../../assets/logo.png";
@@ -91,28 +102,44 @@ const AdminDashboard = () => {
     addCarouselImage,
     removeCarouselImage,
     getStats,
+    recentPublished,
+    dashboardAnalytics,
+    fetchDashboardAnalytics,
   } = useAppData();
 
   const [newCarouselUrl, setNewCarouselUrl] = useState("");
   const [editingSettings, setEditingSettings] = useState(settings);
+  const [analyticsFilters, setAnalyticsFilters] = useState({
+    year: String(new Date().getFullYear()),
+    month: "all",
+  });
 
   useEffect(() => {
     setEditingSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    fetchDashboardAnalytics({
+      year: Number(analyticsFilters.year),
+      month: analyticsFilters.month === "all" ? undefined : Number(analyticsFilters.month),
+    }).catch((error) => {
+      console.error("Failed to fetch analytics:", error);
+    });
+  }, [analyticsFilters, fetchDashboardAnalytics]);
 
   if (isAuthChecking) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
   if (!isAdminLoggedIn) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   const stats = getStats();
 
   const handleLogout = () => {
     logoutAdmin();
-    navigate("/login");
+    navigate("/");
   };
 
   const handleAddCarouselImage = () => {
@@ -192,6 +219,14 @@ const AdminDashboard = () => {
             <TabsTrigger value="settings" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Settings className="w-4 h-4 mr-2" />
               Settings
+            </TabsTrigger>
+            <TabsTrigger value="recent-published" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Newspaper className="w-4 h-4 mr-2" />
+              Recent Published
+            </TabsTrigger>
+            <TabsTrigger value="statistics" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <LineChartIcon className="w-4 h-4 mr-2" />
+              Statistics
             </TabsTrigger>
           </TabsList>
 
@@ -405,22 +440,59 @@ const AdminDashboard = () => {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            {sub.status === "Pending" && (
-                              <Select onValueChange={(editorId) => {
-                                assignSubmission(sub.id, editorId);
-                                toast({ title: "Editor assigned!" });
+                            {(sub.status === "Pending" || sub.status === "Under Review") && (
+                              <Select onValueChange={async (editorId) => {
+                                const editorName = editors.find((e) => String(e.id) === String(editorId))?.name || "selected editor";
+                                const confirmed = window.confirm(
+                                  `Assign submission #${sub.id} to ${editorName}?`
+                                );
+                                if (!confirmed) return;
+                                try {
+                                  await assignSubmission(sub.id, editorId);
+                                  toast({ title: "Editor assigned!" });
+                                } catch (error) {
+                                  toast({
+                                    title: "Assignment failed",
+                                    description: error.message,
+                                    variant: "destructive",
+                                  });
+                                }
                               }}>
                                 <SelectTrigger className="w-32">
                                   <SelectValue placeholder="Assign" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {editors.map((editor) => (
-                                    <SelectItem key={editor.id} value={editor.id}>
+                                    <SelectItem key={editor.id} value={String(editor.id)}>
                                       {editor.name}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
+                            )}
+                            {sub.assignedTo && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  const confirmed = window.confirm(
+                                    `Unassign editor from submission #${sub.id}?`
+                                  );
+                                  if (!confirmed) return;
+                                  try {
+                                    await assignSubmission(sub.id, null);
+                                    toast({ title: "Editor unassigned" });
+                                  } catch (error) {
+                                    toast({
+                                      title: "Unassign failed",
+                                      description: error.message,
+                                      variant: "destructive",
+                                    });
+                                  }
+                                }}
+                              >
+                                Unassign
+                              </Button>
                             )}
                             {sub.status === "Completed" && (
                               <Button
@@ -646,6 +718,126 @@ const AdminDashboard = () => {
               <Button onClick={handleSaveSettings} className="w-full sm:w-auto">
                 Save Settings
               </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="recent-published">
+            <div className="bg-card border border-border rounded-lg p-6">
+              <h2 className="font-serif text-xl font-semibold mb-6">Recently Published Articles</h2>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User Name</TableHead>
+                    <TableHead>Article</TableHead>
+                    <TableHead>Journal</TableHead>
+                    <TableHead>Published Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentPublished.length > 0 ? recentPublished.map((item) => (
+                    <TableRow key={item.article_id}>
+                      <TableCell>{item.author_name}</TableCell>
+                      <TableCell className="max-w-xs truncate">{item.article_title}</TableCell>
+                      <TableCell>{item.journal_name}</TableCell>
+                      <TableCell>{item.published_date || "-"}</TableCell>
+                    </TableRow>
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                        No recently published records found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="statistics">
+            <div className="space-y-6">
+              <div className="bg-card border border-border rounded-lg p-6">
+                <h2 className="font-serif text-xl font-semibold mb-4">Traffic & Submission Analytics</h2>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <Label>Year</Label>
+                    <Input
+                      type="number"
+                      value={analyticsFilters.year}
+                      onChange={(e) => setAnalyticsFilters((prev) => ({ ...prev, year: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label>Month</Label>
+                    <Select
+                      value={analyticsFilters.month}
+                      onValueChange={(value) => setAnalyticsFilters((prev) => ({ ...prev, month: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="All months" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Months</SelectItem>
+                        {Array.from({ length: 12 }, (_, idx) => idx + 1).map((month) => (
+                          <SelectItem key={month} value={String(month)}>
+                            {month}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <StatCard title="Visitors" value={dashboardAnalytics?.visitors_count ?? 0} icon={Users} />
+                  <StatCard title="Submissions" value={dashboardAnalytics?.submissions_count ?? 0} icon={FileText} />
+                </div>
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-6">
+                <h3 className="font-serif text-lg font-semibold mb-4">Submissions Trend (Month-wise)</h3>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={dashboardAnalytics?.submissions_trend || []}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="count" stroke="#0f766e" strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-6">
+                <h3 className="font-serif text-lg font-semibold mb-4">Published Article Metrics</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Article</TableHead>
+                      <TableHead>Author</TableHead>
+                      <TableHead>Views</TableHead>
+                      <TableHead>Downloads</TableHead>
+                      <TableHead>Published</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(dashboardAnalytics?.article_metrics || []).length > 0 ? (
+                      (dashboardAnalytics?.article_metrics || []).map((item) => (
+                        <TableRow key={item.article_id}>
+                          <TableCell className="max-w-xs truncate">{item.title}</TableCell>
+                          <TableCell>{item.author_name}</TableCell>
+                          <TableCell>{item.views}</TableCell>
+                          <TableCell>{item.downloads}</TableCell>
+                          <TableCell>{item.published_date || "-"}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground">
+                          No article metrics available.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </TabsContent>
         </Tabs>

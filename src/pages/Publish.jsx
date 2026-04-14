@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
-import { extractApiError, normalizeEmail, normalizeText } from "@/lib/api";
+import { extractApiError, normalizeEmail, normalizeText, resolveBackendUrl } from "@/lib/api";
 import { ARTICLE_TYPES, JOURNAL_CATEGORY_BY_TITLE, JOURNAL_OPTIONS } from "@/data/journalOptions";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -16,7 +16,7 @@ const Publish = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
-  const { addSubmission, currentUser, logoutUser, isAuthChecking, checkAuth } = useAppData();
+  const { addSubmission, currentUser, logoutUser, isAuthChecking, checkAuth, loginUser } = useAppData();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [file, setFile] = useState(null);
   const [image, setImage] = useState(null);
@@ -107,7 +107,7 @@ const Publish = () => {
     setIsSubmitting(true);
 
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+      const backendUrl = resolveBackendUrl();
       const normalizedForm = {
         fullName: normalizeText(formData.fullName),
         email: normalizeEmail(formData.email),
@@ -167,6 +167,8 @@ const Publish = () => {
           throw new Error(extractApiError(errorData, "Account created but automatic login failed"));
         }
 
+        const loginData = await loginResponse.json();
+
         try {
           const refreshCsrf = await fetch(`${backendUrl}/api/csrf/`, { credentials: "include" });
           if (refreshCsrf.ok) {
@@ -179,7 +181,16 @@ const Publish = () => {
           console.error("Failed to refresh CSRF token after registration", refreshError);
         }
 
-        await checkAuth();
+        loginUser({
+          id: loginData.id,
+          username: loginData.full_name || normalizedForm.fullName,
+          email: loginData.email || normalizedForm.email,
+          role: loginData.role || "USER",
+        });
+
+        checkAuth().catch((authError) => {
+          console.error("Post-registration auth refresh failed", authError);
+        });
       }
 
       const submissionData = new FormData();
@@ -238,8 +249,8 @@ const Publish = () => {
       <Navbar 
         isLoggedIn={!!currentUser}
         user={currentUser}
-        onSignIn={() => navigate("/login")}
-        onSignUp={() => navigate("/login")}
+        onSignIn={() => navigate("/")}
+        onSignUp={() => navigate("/")}
         onSignOut={() => {
           logoutUser();
           navigate("/");
@@ -296,7 +307,7 @@ const Publish = () => {
                   </div>
 
                   <p className="text-sm text-muted-foreground">
-                    Already have an account? <Link to="/login" className="text-primary hover:underline">Sign in here</Link>.
+                    Already have an account? <Link to="/" className="text-primary hover:underline">Sign in here</Link>.
                   </p>
                 </div>
               )}

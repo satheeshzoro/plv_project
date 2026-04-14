@@ -163,6 +163,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     )
 
     # Common profile
+    profile_image = models.ImageField(upload_to="editors/profile/", blank=True, null=True)
     country = models.CharField(max_length=100, blank=True, null=True)
     whatsapp = models.CharField(max_length=20, blank=True, null=True)
 

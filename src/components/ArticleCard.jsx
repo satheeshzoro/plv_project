@@ -1,5 +1,6 @@
 import { Clock, ArrowUpRight } from "lucide-react";
 import { useAppData } from "@/context/AppDataContext";
+import { resolveBackendUrl } from "@/lib/api";
 
 const ArticleCard = ({ article, index }) => {
   const { id, title, author, date, publishedDate, category, readTime, image, excerpt, file } = article;
@@ -8,7 +9,7 @@ const ArticleCard = ({ article, index }) => {
   const getFullUrl = (url) => {
     if (!url) return null;
     if (url.startsWith("http")) return url;
-    const backend = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+    const backend = resolveBackendUrl();
     if (url.startsWith("/media")) return `${backend}${url}`;
     const path = url.startsWith("/") ? url : `/${url}`;
     return `${backend}/media${path}`;

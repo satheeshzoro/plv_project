@@ -1,15 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   FileText,
-  Image,
   LogOut,
-  Plus,
-  Trash2,
   CheckCircle,
-  XCircle,
   Clock,
+  Newspaper,
+  LineChart as LineChartIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,13 +21,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import {
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
 import logoImage from "../../assets/logo.png";
@@ -66,15 +73,20 @@ const EditorDashboard = () => {
     logoutEditor,
     isAuthChecking,
     submissions,
-    updateSubmissionStatus,
-    settings,
-    addCarouselImage,
-    removeCarouselImage,
+    uploadEditorProfileImage,
     getEditorStats,
+    recentPublished,
+    dashboardAnalytics,
+    fetchDashboardAnalytics,
+    fetchSubmissions,
   } = useAppData();
 
-  const [newCarouselUrl, setNewCarouselUrl] = useState("");
-  const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [profileImageFile, setProfileImageFile] = useState(null);
+  const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
+  const [analyticsFilters, setAnalyticsFilters] = useState({
+    year: String(new Date().getFullYear()),
+    month: "all",
+  });
 
   if (isAuthChecking) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -85,29 +97,146 @@ const EditorDashboard = () => {
   }
 
   if (!currentEditor) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
+  }
+
+  if (currentEditor.requiresProfileImage) {
+    return (
+      <div className="dashboard-shell min-h-screen">
+        <header className="brand-topbar sticky top-0 z-50 border-b border-border">
+          <div className="container flex items-center justify-between h-16">
+            <div className="flex items-center gap-4">
+              <span className="brand-logo-mark">
+                <img src={logoImage} alt="QuiLive logo" className="h-8 w-8 object-contain" />
+              </span>
+              <span className="text-muted-foreground">Editor Panel</span>
+            </div>
+            <Button variant="ghost" onClick={handleLogout} className="text-destructive">
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
+          </div>
+        </header>
+        <main className="container py-10">
+          <div className="mx-auto max-w-xl rounded-xl border border-border bg-card p-6 md:p-8">
+            <h1 className="font-serif text-2xl font-semibold text-heading">Complete your editor profile</h1>
+            <p className="mt-3 text-muted-foreground">
+              Your first editor login requires a profile image before continuing.
+              Upload an image between 64 x 64 and 500 x 500 pixels, at most 1.5 MB.
+            </p>
+            <div className="mt-6 space-y-4">
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setProfileImageFile(e.target.files?.[0] || null)}
+              />
+              <Button onClick={handleMandatoryProfileImageUpload} disabled={isUploadingProfileImage}>
+                {isUploadingProfileImage ? "Uploading..." : "Upload And Continue"}
+              </Button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   const editorStats = getEditorStats(currentEditor.id);
-  const myTasks = submissions.filter((s) => s.assignedTo === currentEditor.id);
+  const myTasks = submissions.filter((s) => Number(s.assignedTo) === Number(currentEditor.id));
 
-  const handleLogout = () => {
+  const myRecentPublished = recentPublished.filter(
+    (item) => item.author_email === currentEditor.email || item.author_name === currentEditor.name,
+  );
+
+  function handleLogout() {
     logoutEditor();
-    navigate("/login");
+    navigate("/");
+  }
+
+  function getImageDimensions(file) {
+    return new Promise((resolve, reject) => {
+      const imagePreview = new window.Image();
+      const objectUrl = URL.createObjectURL(file);
+      imagePreview.onload = () => {
+        resolve({ width: imagePreview.width, height: imagePreview.height });
+        URL.revokeObjectURL(objectUrl);
+      };
+      imagePreview.onerror = () => {
+        reject(new Error("Invalid image file."));
+        URL.revokeObjectURL(objectUrl);
+      };
+      imagePreview.src = objectUrl;
+    });
+  }
+
+  async function handleMandatoryProfileImageUpload() {
+    if (!profileImageFile) {
+      toast({
+        title: "Image required",
+        description: "Please select an image between 64 x 64 and 500 x 500 pixels.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (profileImageFile.size > 1.5 * 1024 * 1024) {
+      toast({
+        title: "Image too large",
+        description: "Image size must be at most 1.5 MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { width, height } = await getImageDimensions(profileImageFile);
+      if (width < 64 || height < 64 || width > 500 || height > 500) {
+        toast({
+          title: "Invalid image size",
+          description: "Editor image must be between 64 x 64 and 500 x 500 pixels.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setIsUploadingProfileImage(true);
+      await uploadEditorProfileImage(profileImageFile);
+      setProfileImageFile(null);
+      toast({
+        title: "Profile updated",
+        description: "Your editor image has been uploaded successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Upload failed",
+        description: error.message || "Unable to upload profile image.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingProfileImage(false);
+    }
+  }
+
+  const handleFetchAnalytics = () => {
+    fetchDashboardAnalytics({
+      year: Number(analyticsFilters.year),
+      month: analyticsFilters.month === "all" ? undefined : Number(analyticsFilters.month),
+    }).catch((error) => {
+      console.error("Failed to fetch analytics:", error);
+    });
   };
 
-  const handleUpdateStatus = (submissionId, status) => {
-    updateSubmissionStatus(submissionId, status);
-    setSelectedSubmission(null);
-    toast({ title: `Status updated to ${status}` });
-  };
+  useEffect(() => {
+    handleFetchAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const handleAddCarouselImage = () => {
-    if (!newCarouselUrl) return;
-    addCarouselImage(newCarouselUrl);
-    setNewCarouselUrl("");
-    toast({ title: "Carousel image added!" });
-  };
+  useEffect(() => {
+    fetchSubmissions();
+    const intervalId = setInterval(() => {
+      fetchSubmissions();
+    }, 10000);
+    return () => clearInterval(intervalId);
+  }, [fetchSubmissions]);
 
   return (
     <div className="dashboard-shell">
@@ -158,9 +287,13 @@ const EditorDashboard = () => {
               <FileText className="w-4 h-4 mr-2" />
               My Tasks
             </TabsTrigger>
-            <TabsTrigger value="carousel" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <Image className="w-4 h-4 mr-2" />
-              Carousel
+            <TabsTrigger value="recent-published" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Newspaper className="w-4 h-4 mr-2" />
+              Recent Published
+            </TabsTrigger>
+            <TabsTrigger value="statistics" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <LineChartIcon className="w-4 h-4 mr-2" />
+              Statistics
             </TabsTrigger>
           </TabsList>
 
@@ -192,10 +325,6 @@ const EditorDashboard = () => {
                 <Button variant="outline" onClick={() => document.querySelector('[value="tasks"]')?.click()}>
                   <FileText className="w-4 h-4 mr-2" />
                   View My Tasks
-                </Button>
-                <Button variant="outline" onClick={() => document.querySelector('[value="carousel"]')?.click()}>
-                  <Image className="w-4 h-4 mr-2" />
-                  Manage Carousel
                 </Button>
               </div>
             </div>
@@ -273,45 +402,125 @@ const EditorDashboard = () => {
             </div>
           </TabsContent>
 
-          {/* Carousel Tab */}
-          <TabsContent value="carousel">
+          <TabsContent value="recent-published">
             <div className="bg-card border border-border rounded-lg p-6">
-              <h2 className="font-serif text-xl font-semibold mb-6">Carousel Management</h2>
+              <h2 className="font-serif text-xl font-semibold mb-6">Recently Published Articles</h2>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User Name</TableHead>
+                    <TableHead>Article</TableHead>
+                    <TableHead>Journal</TableHead>
+                    <TableHead>Published Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {myRecentPublished.length > 0 ? myRecentPublished.map((item) => (
+                    <TableRow key={item.article_id}>
+                      <TableCell>{item.author_name}</TableCell>
+                      <TableCell className="max-w-xs truncate">{item.article_title}</TableCell>
+                      <TableCell>{item.journal_name}</TableCell>
+                      <TableCell>{item.published_date || "-"}</TableCell>
+                    </TableRow>
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground">
+                        No recently published records found for your queue.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
 
-              <div className="flex gap-4 mb-6">
-                <Input
-                  placeholder="Enter image URL"
-                  value={newCarouselUrl}
-                  onChange={(e) => setNewCarouselUrl(e.target.value)}
-                  className="flex-1"
-                />
-                <Button onClick={handleAddCarouselImage}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add
-                </Button>
+          <TabsContent value="statistics">
+            <div className="space-y-6">
+              <div className="bg-card border border-border rounded-lg p-6">
+                <h2 className="font-serif text-xl font-semibold mb-4">Traffic & Submission Analytics</h2>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <Label>Year</Label>
+                    <Input
+                      type="number"
+                      value={analyticsFilters.year}
+                      onChange={(e) => setAnalyticsFilters((prev) => ({ ...prev, year: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label>Month</Label>
+                    <Select
+                      value={analyticsFilters.month}
+                      onValueChange={(value) => setAnalyticsFilters((prev) => ({ ...prev, month: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="All months" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Months</SelectItem>
+                        {Array.from({ length: 12 }, (_, idx) => idx + 1).map((month) => (
+                          <SelectItem key={month} value={String(month)}>
+                            {month}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button className="self-end" onClick={handleFetchAnalytics}>Apply Filters</Button>
+                </div>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <StatCard title="Visitors" value={dashboardAnalytics?.visitors_count ?? 0} icon={Clock} />
+                  <StatCard title="Submissions" value={dashboardAnalytics?.submissions_count ?? 0} icon={FileText} />
+                </div>
               </div>
 
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {settings.carouselImages.map((url, index) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={url}
-                      alt={`Carousel ${index + 1}`}
-                      className="w-full h-40 object-cover rounded-lg"
-                    />
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => {
-                        removeCarouselImage(index);
-                        toast({ title: "Image removed" });
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
+              <div className="bg-card border border-border rounded-lg p-6">
+                <h3 className="font-serif text-lg font-semibold mb-4">Submissions Trend (Month-wise)</h3>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={dashboardAnalytics?.submissions_trend || []}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="count" stroke="#0f766e" strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-6">
+                <h3 className="font-serif text-lg font-semibold mb-4">Published Article Metrics</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Article</TableHead>
+                      <TableHead>Author</TableHead>
+                      <TableHead>Views</TableHead>
+                      <TableHead>Downloads</TableHead>
+                      <TableHead>Published</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(dashboardAnalytics?.article_metrics || []).length > 0 ? (
+                      (dashboardAnalytics?.article_metrics || []).map((item) => (
+                        <TableRow key={item.article_id}>
+                          <TableCell className="max-w-xs truncate">{item.title}</TableCell>
+                          <TableCell>{item.author_name}</TableCell>
+                          <TableCell>{item.views}</TableCell>
+                          <TableCell>{item.downloads}</TableCell>
+                          <TableCell>{item.published_date || "-"}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground">
+                          No article metrics available.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </div>
           </TabsContent>

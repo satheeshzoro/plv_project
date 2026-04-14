@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BadgeCheck,
   CreditCard,
@@ -78,6 +78,18 @@ const SubmissionProcessSection = () => {
 
   const currentStep = PROCESS_STEPS.find((step) => step.id === activeStep) || PROCESS_STEPS[0];
   const CurrentIcon = currentStep.icon;
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setActiveStep((prev) => {
+        const currentIndex = PROCESS_STEPS.findIndex((step) => step.id === prev);
+        const nextIndex = (currentIndex + 1) % PROCESS_STEPS.length;
+        return PROCESS_STEPS[nextIndex].id;
+      });
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   return (
     <section className={`py-16 md:py-24 ${isDark ? "bg-[#0d1120]" : "bg-secondary/40"}`}>

@@ -61,13 +61,16 @@ MIDDLEWARE = [
 
 CORS_ALLOWED_ORIGINS = [
   "http://localhost:3000",
-  "http://127.0.0.1:3000"
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-
-"http://localhost:3000",
-  "http://127.0.0.1:3000"
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -92,6 +95,9 @@ CSRF_USE_SESSIONS = False  # Recommendation: Set to False for easier SPA integra
 CSRF_COOKIE_SECURE = False # Set to True for HTTPS in production
 CSRF_COOKIE_HTTPONLY = False # Set to False if frontend needs to read the cookie
 CSRF_COOKIE_SAMESITE = "Lax" # Change from Strict to Lax for cross-origin local dev
+SESSION_COOKIE_SECURE = False
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
 
 # Ensure CORS headers are sent even on error responses
 CORS_ALLOW_ALL_ORIGINS = False 

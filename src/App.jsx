@@ -16,6 +16,7 @@ import CommonLogin from "./pages/CommonLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import EditorDashboard from "./pages/EditorDashboard";
 import EditorArticleView from "./pages/EditorArticleView";
+import UsersDirectory from "./pages/UsersDirectory";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,13 +44,15 @@ const App = () => (
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/submit-and-register" element={<Publish />} />
               <Route path="/publish" element={<Publish />} />
-              <Route path="/login" element={<CommonLogin />} />
+              <Route path="/admin/login" element={<CommonLogin />} />
+              <Route path="/editor/login" element={<CommonLogin />} />
               <Route path="/user/dashboard" element={<UserDashboard />} />
-              <Route path="/admin" element={<Navigate to="/login" replace />} />
+              <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              <Route path="/editor" element={<Navigate to="/login" replace />} />
+              <Route path="/editor" element={<Navigate to="/editor/login" replace />} />
               <Route path="/editor/dashboard" element={<EditorDashboard />} />
               <Route path="/editor/submission/:id" element={<EditorArticleView />} />
+              <Route path="/users" element={<UsersDirectory />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

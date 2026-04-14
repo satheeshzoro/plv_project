@@ -18,7 +18,7 @@ const StaticPageLayout = ({ title, subtitle, children }) => {
           logoutUser();
           navigate("/");
         }}
-        submitPath={currentUser ? "/publish" : "/submit-and-register"}
+        submitPath="/publish"
       />
 
       <main className="py-12 md:py-16">

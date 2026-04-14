@@ -72,7 +72,7 @@ const StaticContentPage = () => {
                 </a>
               </Button>
               <Button variant="outline" asChild>
-                <a href="/submit-and-register">Submit Manuscript</a>
+                <a href="/publish">Submit Manuscript</a>
               </Button>
             </div>
           </div>

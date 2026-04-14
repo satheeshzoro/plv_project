@@ -24,11 +24,12 @@ import Footer from "@/components/Footer";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
 import { ARTICLE_TYPES, JOURNAL_OPTIONS as JOURNAL_TYPES } from "@/data/journalOptions";
+import { resolveBackendUrl } from "@/lib/api";
 
 const getFullUrl = (url) => {
   if (!url) return null;
   if (url.startsWith("http")) return url;
-  const backend = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+  const backend = resolveBackendUrl();
   if (url.startsWith("/media")) return `${backend}${url}`;
   const path = url.startsWith("/") ? url : `/${url}`;
   return `${backend}/media${path}`;
@@ -133,7 +134,6 @@ const Articles = () => {
   }, [normalizedArticles, selectedJournal, selectedArticleType]);
 
   const articlesInPress = journalArticles.slice(0, 3);
-  const currentIssue = journalArticles.slice(0, 6);
   const archive = journalArticles;
   const journalDownloadCount = useMemo(
     () => journalArticles.reduce((total, article) => total + (article.downloads || 0), 0),
@@ -172,7 +172,7 @@ const Articles = () => {
       params.set("articleType", selectedArticleType);
     }
 
-    const target = currentUser ? "/publish" : "/submit-and-register";
+    const target = "/publish";
     navigate(`${target}?${params.toString()}`);
   };
 
@@ -238,30 +238,6 @@ const Articles = () => {
       );
     }
 
-    if (activeTab === "current-issue") {
-      return (
-        <div className="rounded-r-xl border border-l-0 border-border bg-card p-8">
-          <DownloadList
-            articles={currentIssue}
-            onDownload={handleDownload}
-            emptyMessage="No current issue articles available for this journal."
-          />
-        </div>
-      );
-    }
-
-    if (activeTab === "archive") {
-      return (
-        <div className="rounded-r-xl border border-l-0 border-border bg-card p-8">
-          <DownloadList
-            articles={archive}
-            onDownload={handleDownload}
-            emptyMessage="No archive articles available for this journal."
-          />
-        </div>
-      );
-    }
-
     return (
       <div className="rounded-r-xl border border-l-0 border-border bg-card p-8">
         <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
@@ -310,7 +286,7 @@ const Articles = () => {
           logoutUser();
           navigate("/");
         }}
-        submitPath={currentUser ? "/publish" : "/submit-and-register"}
+        submitPath="/publish"
       />
 
       <main>
@@ -434,8 +410,6 @@ const Articles = () => {
                       ["about", "About Journal"],
                       ["editorial-board", "Editorial Board"],
                       ["articles-in-press", "Article in Press"],
-                      ["current-issue", "Current Issue"],
-                      ["archive", "Archive"],
                       ["submit-manuscript", "Submit Manuscript"],
                     ].map(([value, label]) => (
                       <button

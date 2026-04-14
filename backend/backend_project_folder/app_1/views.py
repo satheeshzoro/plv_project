@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.db.models import Count, F, Q
+from django.db.models.functions import ExtractMonth
 from django.core.mail import send_mail
 from datetime import timedelta
 
@@ -20,6 +21,19 @@ from .serializers import *
 from .permissions import IsAdmin, IsEditor, IsUser
 
 User = get_user_model()
+
+
+def get_profile_image_url(request, user):
+    if not getattr(user, "profile_image", None):
+        return None
+    try:
+        return request.build_absolute_uri(user.profile_image.url)
+    except Exception:
+        return None
+
+
+def editor_profile_image_missing(user):
+    return getattr(user, "role", "").upper() == "EDITOR" and not bool(getattr(user, "profile_image", None))
 
 # ==============================================================================
 # AUTHENTICATION VIEWS
@@ -59,6 +73,9 @@ class LoginAPIView(APIView):
                     "email": user.email,
                     "role": user.role,
                     "full_name": user.full_name,
+                    "profile_image": get_profile_image_url(request, user),
+                    "requires_profile_image": user.role == "EDITOR" and not bool(user.profile_image),
+                    "mapped_journal_category": getattr(user, "mapped_journal_category", None),
                 },
                 status=status.HTTP_200_OK
             )
@@ -97,6 +114,8 @@ class CurrentUserAPIView(APIView):
             "full_name": user.full_name,
             "role": user.role,
             "mapped_journal_category": getattr(user, "mapped_journal_category", None),
+            "profile_image": get_profile_image_url(request, user),
+            "requires_profile_image": user.role == "EDITOR" and not bool(user.profile_image),
         })
 
 # ==============================================================================
@@ -111,16 +130,27 @@ class MySubmissionsAPIView(APIView):
         serializer = ArticleListSerializer(articles, many=True, context={"request": request})
         return Response(serializer.data)
 
+
+class SubmissionHistoryAPIView(APIView):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated, IsUser]
+
+    def get(self, request):
+        articles = Article.objects.filter(submitted_by=request.user).order_by("-created_at")
+        serializer = ArticleListSerializer(articles, many=True, context={"request": request})
+        return Response(serializer.data)
+
 class AssignEditorAPIView(APIView):
     permission_classes = [IsAdmin]
     def patch(self, request, pk):
         article = get_object_or_404(Article, pk=pk)
         editor_id = request.data.get("editor_id")
-        if not editor_id:
-            return Response(
-                {"detail": "editor_id is required"},
-                status=400
-            )
+        if editor_id in [None, "", "null"]:
+            article.assigned_to = None
+            if article.status == "UNDER_REVIEW":
+                article.status = "PENDING"
+            article.save()
+            return Response({"message": "Editor unassigned successfully"})
 
         editor = get_object_or_404(User, pk=editor_id, role="EDITOR")
 
@@ -136,9 +166,9 @@ class AssignEditorAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if article.status != "PENDING":
+        if article.status not in ["PENDING", "UNDER_REVIEW"]:
             return Response(
-                {"detail": "Only pending submissions can be assigned."},
+                {"detail": "Only pending or under-review submissions can be assigned."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -150,6 +180,11 @@ class AssignEditorAPIView(APIView):
 class EditorTasksAPIView(APIView):
     permission_classes = [IsEditor]
     def get(self, request):
+        if editor_profile_image_missing(request.user):
+            return Response(
+                {"detail": "Profile image is required. Upload an image between 64x64 and 500x500 pixels to continue."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         articles = Article.objects.filter(assigned_to=request.user)
         if request.user.mapped_journal_category:
             articles = articles.filter(category=request.user.mapped_journal_category)
@@ -254,6 +289,11 @@ class UpdateSubmissionStatusAPIView(APIView):
         editor_report = (request.data.get("editor_report") or "").strip()
 
         if request.user.role == "EDITOR":
+            if editor_profile_image_missing(request.user):
+                return Response(
+                    {"error": "Profile image is required before reviewing submissions."},
+                    status=403,
+                )
             if article.assigned_to != request.user:
                 return Response({"error": "Not your assigned article"}, status=403)
 
@@ -300,6 +340,256 @@ class AllSubmissionsAPIView(ListAPIView):
     def get_serializer_context(self):
         return {'request': self.request}
 
+
+class ProfileSummaryAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        submitted_articles = Article.objects.filter(submitted_by=user)
+        total_submissions = submitted_articles.count()
+        published_submissions = submitted_articles.filter(status="PUBLISHED").count()
+
+        return Response(
+            {
+                "id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "role": user.role,
+                "whatsapp": user.whatsapp,
+                "pen_name": user.pen_name,
+                "country": user.country,
+                "profile_image": get_profile_image_url(request, user),
+                "requires_profile_image": user.role == "EDITOR" and not bool(user.profile_image),
+                "mapped_journal_category": getattr(user, "mapped_journal_category", None),
+                "total_submissions": total_submissions,
+                "published_submissions": published_submissions,
+            }
+        )
+
+    def patch(self, request):
+        user = request.user
+
+        full_name = (request.data.get("full_name") or user.full_name).strip()
+        email = (request.data.get("email") or user.email).strip().lower()
+        whatsapp = (request.data.get("whatsapp") or "").strip() or None
+        pen_name = (request.data.get("pen_name") or "").strip() or None
+        country = (request.data.get("country") or "").strip() or None
+
+        if not full_name:
+            return Response({"detail": "full_name is required"}, status=400)
+
+        if not email:
+            return Response({"detail": "email is required"}, status=400)
+
+        if User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists():
+            return Response({"detail": "A user with this email already exists."}, status=400)
+
+        user.full_name = full_name
+        user.email = email
+        user.whatsapp = whatsapp
+        user.pen_name = pen_name
+        user.country = country
+        user.save()
+
+        submitted_articles = Article.objects.filter(submitted_by=user)
+        return Response(
+            {
+                "id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "role": user.role,
+                "whatsapp": user.whatsapp,
+                "pen_name": user.pen_name,
+                "country": user.country,
+                "profile_image": get_profile_image_url(request, user),
+                "requires_profile_image": user.role == "EDITOR" and not bool(user.profile_image),
+                "mapped_journal_category": getattr(user, "mapped_journal_category", None),
+                "total_submissions": submitted_articles.count(),
+                "published_submissions": submitted_articles.filter(status="PUBLISHED").count(),
+            }
+        )
+
+
+class EditorProfileImageAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsEditor]
+
+    def get(self, request):
+        return Response(
+            {
+                "id": request.user.id,
+                "profile_image": get_profile_image_url(request, request.user),
+                "requires_profile_image": not bool(request.user.profile_image),
+            }
+        )
+
+    def put(self, request):
+        serializer = EditorProfileImageUploadSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {
+                "message": "Profile image uploaded successfully.",
+                "profile_image": get_profile_image_url(request, request.user),
+                "requires_profile_image": not bool(request.user.profile_image),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class UserDirectoryAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        users = (
+            User.objects.filter(role="USER")
+            .annotate(
+                submitted_count=Count("submissions"),
+                published_count=Count("submissions", filter=Q(submissions__status="PUBLISHED")),
+            )
+            .order_by("full_name")
+        )
+
+        return Response(
+            [
+                {
+                    "id": user.id,
+                    "full_name": user.full_name,
+                    "email": user.email,
+                    "pen_name": user.pen_name,
+                    "submitted_count": user.submitted_count,
+                    "published_count": user.published_count,
+                }
+                for user in users
+            ]
+        )
+
+
+class RecentPublishedAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        limit = min(int(request.query_params.get("limit", 10)), 50)
+        articles = (
+            Article.objects.filter(status="PUBLISHED")
+            .order_by("-published_date", "-created_at")[:limit]
+        )
+
+        results = [
+            {
+                "article_id": article.id,
+                "article_title": article.title,
+                "journal_name": article.journal_name,
+                "author_name": article.author_name,
+                "author_email": article.author_email,
+                "published_date": article.published_date,
+                "views": article.views,
+                "downloads": article.downloads,
+            }
+            for article in articles
+        ]
+        return Response(results)
+
+
+class DashboardAnalyticsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role not in ["ADMIN", "EDITOR"]:
+            return Response({"detail": "Only admin or editor can access analytics."}, status=403)
+        if request.user.role == "EDITOR" and editor_profile_image_missing(request.user):
+            return Response(
+                {"detail": "Profile image is required before accessing editor analytics."},
+                status=403,
+            )
+
+        now = timezone.now()
+        year_param = request.query_params.get("year")
+        month_param = request.query_params.get("month")
+
+        try:
+            year = int(year_param) if year_param else now.year
+        except (TypeError, ValueError):
+            return Response({"detail": "year must be a valid integer"}, status=400)
+
+        if year < 2000 or year > now.year + 1:
+            return Response({"detail": "year is out of allowed range"}, status=400)
+
+        month = None
+        if month_param:
+            try:
+                month = int(month_param)
+            except (TypeError, ValueError):
+                return Response({"detail": "month must be a valid integer"}, status=400)
+            if month < 1 or month > 12:
+                return Response({"detail": "month must be between 1 and 12"}, status=400)
+
+        submissions_qs = Article.objects.all()
+        if request.user.role == "EDITOR":
+            submissions_qs = submissions_qs.filter(assigned_to=request.user)
+            if request.user.mapped_journal_category:
+                submissions_qs = submissions_qs.filter(category=request.user.mapped_journal_category)
+
+        year_submissions = submissions_qs.filter(created_at__year=year)
+        monthly_counts = (
+            year_submissions
+            .annotate(month_index=ExtractMonth("created_at"))
+            .values("month_index")
+            .annotate(total=Count("id"))
+            .order_by("month_index")
+        )
+        monthly_count_map = {row["month_index"]: row["total"] for row in monthly_counts}
+        submissions_trend = [
+            {"month": idx, "count": monthly_count_map.get(idx, 0)}
+            for idx in range(1, 13)
+        ]
+
+        visitors_qs = ArticleView.objects.all()
+        if request.user.role == "EDITOR":
+            visitors_qs = visitors_qs.filter(article__assigned_to=request.user)
+            if request.user.mapped_journal_category:
+                visitors_qs = visitors_qs.filter(article__category=request.user.mapped_journal_category)
+
+        visitors_qs = visitors_qs.filter(created_at__year=year)
+        if month:
+            visitors_qs = visitors_qs.filter(created_at__month=month)
+            year_submissions = year_submissions.filter(created_at__month=month)
+
+        article_metrics_qs = Article.objects.filter(status="PUBLISHED")
+        if request.user.role == "EDITOR":
+            article_metrics_qs = article_metrics_qs.filter(assigned_to=request.user)
+            if request.user.mapped_journal_category:
+                article_metrics_qs = article_metrics_qs.filter(category=request.user.mapped_journal_category)
+
+        article_metrics = [
+            {
+                "article_id": article.id,
+                "title": article.title,
+                "author_name": article.author_name,
+                "journal_name": article.journal_name,
+                "views": article.views,
+                "downloads": article.downloads,
+                "published_date": article.published_date,
+            }
+            for article in article_metrics_qs.order_by("-published_date", "-created_at")[:50]
+        ]
+
+        return Response(
+            {
+                "year": year,
+                "month": month,
+                "visitors_count": visitors_qs.count(),
+                "submissions_count": year_submissions.count(),
+                "submissions_trend": submissions_trend,
+                "article_metrics": article_metrics,
+            }
+        )
+
 # ==============================================================================
 # USER & EDITOR MANAGEMENT VIEWS
 # ==============================================================================
@@ -316,6 +606,11 @@ class EditorListCreateAPIView(ListCreateAPIView):
         if self.request.method == "POST":
             return EditorCreateSerializer
         return EditorSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
 
 
 class UpdateEditorCategoryAPIView(APIView):

@@ -6,11 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
-import { extractApiError, normalizeEmail } from "@/lib/api";
+import { extractApiError, normalizeEmail, resolveBackendUrl } from "@/lib/api";
 import logoImage from "../../assets/logo.png";
 import mainImage from "../../assets/main.png";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+const BACKEND_URL = resolveBackendUrl();
 
 const COMMON_CREDENTIALS = [
   {
@@ -26,8 +26,9 @@ const COMMON_CREDENTIALS = [
 ];
 
 const getRedirectPath = (role) => {
-  if (role === "ADMIN") return "/admin/dashboard";
-  if (role === "EDITOR") return "/editor/dashboard";
+  const normalizedRole = role?.toUpperCase();
+  if (normalizedRole === "ADMIN") return "/admin/dashboard";
+  if (normalizedRole === "EDITOR") return "/editor/dashboard";
   return "/user/dashboard";
 };
 
@@ -35,7 +36,17 @@ const CommonLogin = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { checkAuth, isAuthChecking, isAdminLoggedIn, currentEditor, currentUser } = useAppData();
+  const { 
+    checkAuth, 
+    isAuthChecking, 
+    isAdminLoggedIn, 
+    currentEditor, 
+    currentUser,
+    loginAdmin,
+    loginEditor,
+    loginUser 
+  } = useAppData();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -110,16 +121,34 @@ const CommonLogin = () => {
         console.error("Failed to refresh CSRF token after login", refreshError);
       }
 
-      await checkAuth();
+      // Update global state immediately using the login response
+      // This prevents the "bounce" if the subsequent checkAuth() fails/delays
+      const normalizedRole = data.role?.toUpperCase();
+      if (normalizedRole === "ADMIN") {
+        loginAdmin({ name: data.full_name, email: data.email, role: data.role });
+      } else if (normalizedRole === "EDITOR") {
+        loginEditor({
+          id: data.id,
+          name: data.full_name,
+          email: data.email,
+          role: data.role,
+          profile_image: data.profile_image || null,
+          requires_profile_image: Boolean(data.requires_profile_image),
+          mapped_journal_category: data.mapped_journal_category || "",
+        });
+      } else {
+        loginUser({ id: data.id, username: data.full_name, email: data.email, role: data.role });
+      }
 
       toast({
         title: `Welcome, ${data.full_name || data.email}!`,
-        description: `${data.role === "ADMIN" ? "Admin" : data.role === "EDITOR" ? "Editor" : "User"} access granted.`,
+        description: `${normalizedRole === "ADMIN" ? "Admin" : normalizedRole === "EDITOR" ? "Editor" : "User"} access granted.`,
       });
 
+      const fromPath = location.state?.from?.pathname;
       const nextPath =
-        location.state?.from?.pathname && location.state.from.pathname !== "/login"
-          ? location.state.from.pathname
+        fromPath && fromPath !== "/login" && fromPath !== "/"
+          ? fromPath
           : getRedirectPath(data.role);
 
       navigate(nextPath, { replace: true });

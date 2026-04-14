@@ -39,7 +39,7 @@ const EditorArticleView = () => {
   }
 
   if (!currentEditor) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   if (!submission) {
@@ -85,7 +85,7 @@ const EditorArticleView = () => {
         user={currentEditor}
         onSignOut={() => {
           logoutEditor();
-          navigate("/login");
+          navigate("/");
         }}
       />
 

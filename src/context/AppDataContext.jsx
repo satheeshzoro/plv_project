@@ -1,9 +1,9 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { extractApiError } from "@/lib/api";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import { extractApiError, resolveBackendUrl } from "@/lib/api";
 
 const AppDataContext = createContext(null);
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+const BACKEND_URL = resolveBackendUrl();
 
 const mapStatusFromApi = (status) => {
   const statusMap = {
@@ -32,11 +32,63 @@ export const AppDataProvider = ({ children }) => {
     },
   });
   const [users, setUsers] = useState([]); // Kept for stats if needed, or remove if API doesn't provide
+  const [userDirectory, setUserDirectory] = useState([]);
+  const [recentPublished, setRecentPublished] = useState([]);
+  const [profileSummary, setProfileSummary] = useState(null);
+  const [dashboardAnalytics, setDashboardAnalytics] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [currentEditor, setCurrentEditor] = useState(null);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [adminUser, setAdminUser] = useState(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
+  const authRequestVersionRef = useRef(0);
+
+  const clearAuthState = useCallback(() => {
+    setIsAdminLoggedIn(false);
+    setCurrentEditor(null);
+    setCurrentUser(null);
+    setAdminUser(null);
+  }, []);
+
+  const applyAuthState = useCallback((data) => {
+    const normalizedRole = data?.role?.toUpperCase();
+
+    if (normalizedRole === "ADMIN") {
+      setIsAdminLoggedIn(true);
+      setCurrentEditor(null);
+      setCurrentUser(null);
+      setAdminUser({ name: data.full_name, email: data.email, role: data.role });
+      return;
+    }
+
+    if (normalizedRole === "EDITOR") {
+      setIsAdminLoggedIn(false);
+      setAdminUser(null);
+      setCurrentUser(null);
+      setCurrentEditor({
+        id: data.id,
+        name: data.full_name || data.name,
+        email: data.email,
+        role: data.role,
+        profileImage: data.profile_image || null,
+        requiresProfileImage:
+          data.requires_profile_image ??
+          (data.role?.toUpperCase() === "EDITOR" && !data.profile_image),
+        mappedJournalCategory: data.mapped_journal_category || data.mappedJournalCategory || "",
+      });
+      return;
+    }
+
+    setIsAdminLoggedIn(false);
+    setAdminUser(null);
+    setCurrentEditor(null);
+    setCurrentUser({
+      id: data.id,
+      username: data.full_name || data.username || data.name,
+      email: data.email,
+      role: data.role,
+    });
+  }, []);
 
   // Helper for authenticated fetch
   const authFetch = useCallback(async (endpoint, options = {}) => {
@@ -139,6 +191,8 @@ export const AppDataProvider = ({ children }) => {
         email: e.email,
         penName: e.pen_name,
         country: e.country,
+        profileImage: e.profile_image || null,
+        requiresProfileImage: Boolean(e.requires_profile_image),
         mappedJournalCategory: e.mapped_journal_category || "",
       })));
     } catch (error) {
@@ -157,17 +211,95 @@ export const AppDataProvider = ({ children }) => {
     }
   }, [authFetch, isAdminLoggedIn]);
 
+  const fetchUserDirectory = useCallback(async () => {
+    try {
+      const data = await authFetch("/api/users/directory/");
+      setUserDirectory(data);
+    } catch (error) {
+      console.error("Failed to fetch user directory:", error);
+      setUserDirectory([]);
+    }
+  }, [authFetch]);
+
+  const fetchRecentPublished = useCallback(async () => {
+    try {
+      const data = await authFetch("/api/recent-published/?limit=20");
+      setRecentPublished(data);
+    } catch (error) {
+      console.error("Failed to fetch recent published:", error);
+      setRecentPublished([]);
+    }
+  }, [authFetch]);
+
+  const fetchProfileSummary = useCallback(async () => {
+    try {
+      const data = await authFetch("/api/profile/");
+      setProfileSummary(data);
+      return data;
+    } catch (error) {
+      console.error("Failed to fetch profile summary:", error);
+      setProfileSummary(null);
+      return null;
+    }
+  }, [authFetch]);
+
+  const updateProfileSummary = useCallback(async (payload) => {
+    const data = await authFetch("/api/profile/", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    setProfileSummary(data);
+
+    if (data.role === "USER") {
+      setCurrentUser((prev) => prev ? {
+        ...prev,
+        username: data.full_name,
+        email: data.email,
+      } : prev);
+    } else if (data.role === "EDITOR") {
+      setCurrentEditor((prev) => prev ? {
+        ...prev,
+        name: data.full_name,
+        email: data.email,
+        profileImage: data.profile_image || prev.profileImage || null,
+        requiresProfileImage:
+          data.requires_profile_image ??
+          (data.role?.toUpperCase() === "EDITOR" && !data.profile_image),
+      } : prev);
+    } else if (data.role === "ADMIN") {
+      setAdminUser((prev) => prev ? {
+        ...prev,
+        name: data.full_name,
+        email: data.email,
+      } : prev);
+    }
+
+    return data;
+  }, [authFetch]);
+
+  const fetchDashboardAnalytics = useCallback(async (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.year) params.set("year", String(filters.year));
+    if (filters.month) params.set("month", String(filters.month));
+    const query = params.toString();
+    const endpoint = query ? `/api/analytics/dashboard/?${query}` : "/api/analytics/dashboard/";
+
+    const data = await authFetch(endpoint);
+    setDashboardAnalytics(data);
+    return data;
+  }, [authFetch]);
+
   const fetchSubmissions = useCallback(async () => {
     let endpoint = "";
     if (isAdminLoggedIn) endpoint = "/api/submissions/all/";
     else if (currentEditor) endpoint = "/api/editor/tasks/";
-    else if (currentUser) endpoint = "/api/submissions/my/";
+    else if (currentUser) endpoint = "/api/submissions/history/";
     else return;
 
     try {
       const data = await authFetch(endpoint);
       const mappedSubmissions = data.map(s => ({
-        id: s.id,
+        id: Number(s.id),
         fullName: s.author_name || s.full_name, // Handle variations
         email: s.author_email || s.email,
         country: s.country,
@@ -179,7 +311,7 @@ export const AppDataProvider = ({ children }) => {
         fileUrl: s.file,
         image: s.image,
         status: mapStatusFromApi(s.status),
-        assignedTo: s.assigned_to,
+        assignedTo: s.assigned_to != null ? Number(s.assigned_to) : null,
         editorReport: s.editor_report || "",
         submittedDate: s.created_at?.split('T')[0] || s.submitted_date,
       }));
@@ -191,38 +323,25 @@ export const AppDataProvider = ({ children }) => {
 
   // --- Auth Check (Session Restoration) ---
   const checkAuth = useCallback(async () => {
+    const requestVersion = ++authRequestVersionRef.current;
+
     try {
       // This uses the cookie to ask backend "Who am I?"
       const data = await authFetch("/api/user/me/");
-      
-      if (data.role === "ADMIN") {
-        setIsAdminLoggedIn(true);
-        setCurrentEditor(null);
-        setCurrentUser(null);
-        setAdminUser({ name: data.full_name, email: data.email, role: data.role });
-      } else if (data.role === "EDITOR") {
-        setIsAdminLoggedIn(false);
-        setAdminUser(null);
-        setCurrentUser(null);
-        setCurrentEditor({
-          id: data.id,
-          name: data.full_name,
-          email: data.email,
-          role: data.role,
-          mappedJournalCategory: data.mapped_journal_category || "",
-        });
-      } else {
-        setIsAdminLoggedIn(false);
-        setAdminUser(null);
-        setCurrentEditor(null);
-        setCurrentUser({ id: data.id, username: data.full_name, email: data.email, role: data.role });
+
+      if (requestVersion === authRequestVersionRef.current) {
+        applyAuthState(data);
       }
     } catch (error) {
-      // Not logged in or session expired - that's okay, user stays logged out
+      if (requestVersion === authRequestVersionRef.current) {
+        clearAuthState();
+      }
     } finally {
-      setIsAuthChecking(false);
+      if (requestVersion === authRequestVersionRef.current) {
+        setIsAuthChecking(false);
+      }
     }
-  }, [authFetch]);
+  }, [applyAuthState, authFetch, clearAuthState]);
 
   // Initial Load (Public Data)
   useEffect(() => {
@@ -238,13 +357,35 @@ export const AppDataProvider = ({ children }) => {
     if (isAdminLoggedIn) {
       fetchEditors();
       fetchUsers();
+      fetchUserDirectory();
       fetchSubmissions();
+      fetchRecentPublished();
+      fetchProfileSummary();
+      fetchDashboardAnalytics().catch((error) => {
+        console.error("Failed to fetch dashboard analytics:", error);
+        setDashboardAnalytics(null);
+      });
     } else if (currentEditor || currentUser) {
       fetchSubmissions();
+      fetchUserDirectory();
+      fetchRecentPublished();
+      fetchProfileSummary();
+      if (currentEditor) {
+        fetchDashboardAnalytics().catch((error) => {
+          console.error("Failed to fetch dashboard analytics:", error);
+          setDashboardAnalytics(null);
+        });
+      } else {
+        setDashboardAnalytics(null);
+      }
     } else {
       setSubmissions([]); // Clear sensitive data on logout
+      setUserDirectory([]);
+      setRecentPublished([]);
+      setProfileSummary(null);
+      setDashboardAnalytics(null);
     }
-  }, [isAdminLoggedIn, currentEditor, currentUser, fetchEditors, fetchSubmissions, fetchUsers]);
+  }, [isAdminLoggedIn, currentEditor, currentUser, fetchDashboardAnalytics, fetchEditors, fetchProfileSummary, fetchRecentPublished, fetchSubmissions, fetchUserDirectory, fetchUsers]);
 
   // Submission functions
   const addSubmission = async (formData) => {
@@ -263,9 +404,12 @@ export const AppDataProvider = ({ children }) => {
 
   const assignSubmission = async (submissionId, editorId) => {
     try {
+      const normalizedEditorId = editorId === null || editorId === undefined || editorId === ""
+        ? null
+        : Number(editorId);
       await authFetch(`/api/submissions/${submissionId}/assign/`, {
         method: "PATCH",
-        body: JSON.stringify({ editor_id: editorId }),
+        body: JSON.stringify({ editor_id: normalizedEditorId }),
       });
       fetchSubmissions();
     } catch (error) {
@@ -281,6 +425,7 @@ export const AppDataProvider = ({ children }) => {
         body: JSON.stringify({ status, ...extraData }),
       });
       fetchSubmissions();
+      fetchRecentPublished();
       // If published, refresh journals too
       if (status === "PUBLISHED") {
         fetchJournals();
@@ -357,10 +502,13 @@ export const AppDataProvider = ({ children }) => {
 
   // Auth functions
   const loginAdmin = (userData) => {
-    setIsAdminLoggedIn(true);
-    setAdminUser(userData);
-    setCurrentEditor(null);
-    setCurrentUser(null);
+    authRequestVersionRef.current += 1;
+    setIsAuthChecking(false);
+    applyAuthState({
+      email: userData.email,
+      full_name: userData.name || userData.full_name,
+      role: userData.role,
+    });
     return true;
   };
 
@@ -392,11 +540,35 @@ export const AppDataProvider = ({ children }) => {
     }
   };
 
+  const uploadEditorProfileImage = useCallback(async (file) => {
+    const formData = new FormData();
+    formData.append("profile_image", file);
+
+    const data = await authFetch("/api/editors/me/profile-image/", {
+      method: "PUT",
+      body: formData,
+    });
+
+    setCurrentEditor((prev) => prev ? {
+      ...prev,
+      profileImage: data.profile_image || null,
+      requiresProfileImage: Boolean(data.requires_profile_image),
+    } : prev);
+
+    setProfileSummary((prev) => prev ? {
+      ...prev,
+      profile_image: data.profile_image || null,
+      requires_profile_image: Boolean(data.requires_profile_image),
+    } : prev);
+
+    await fetchEditors();
+    return data;
+  }, [authFetch, fetchEditors]);
+
   const logoutAdmin = async () => {
-    setIsAdminLoggedIn(false);
-    setAdminUser(null);
-    setCurrentEditor(null);
-    setCurrentUser(null);
+    authRequestVersionRef.current += 1;
+    setIsAuthChecking(false);
+    clearAuthState();
     try {
       const backendUrl = BACKEND_URL;
       const csrfToken = localStorage.getItem("csrfToken");
@@ -414,17 +586,26 @@ export const AppDataProvider = ({ children }) => {
   };
 
   const loginEditor = (userData) => {
-    setIsAdminLoggedIn(false);
-    setAdminUser(null);
-    setCurrentEditor(userData);
-    setCurrentUser(null);
+    authRequestVersionRef.current += 1;
+    setIsAuthChecking(false);
+    applyAuthState({
+      id: userData.id,
+      email: userData.email,
+      full_name: userData.full_name || userData.name,
+      role: userData.role,
+      profile_image: userData.profile_image || null,
+      requires_profile_image:
+        userData.requires_profile_image ??
+        (userData.role?.toUpperCase() === "EDITOR" && !userData.profile_image),
+      mapped_journal_category: userData.mapped_journal_category || userData.mappedJournalCategory || "",
+    });
     return true;
   };
 
   const logoutEditor = async () => {
-    setCurrentEditor(null);
-    setIsAdminLoggedIn(false);
-    setAdminUser(null);
+    authRequestVersionRef.current += 1;
+    setIsAuthChecking(false);
+    clearAuthState();
     try {
       const backendUrl = BACKEND_URL;
       const csrfToken = localStorage.getItem("csrfToken");
@@ -442,17 +623,20 @@ export const AppDataProvider = ({ children }) => {
   };
 
   const loginUser = (user) => {
-    setIsAdminLoggedIn(false);
-    setAdminUser(null);
-    setCurrentEditor(null);
-    setCurrentUser(user);
+    authRequestVersionRef.current += 1;
+    setIsAuthChecking(false);
+    applyAuthState({
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name || user.username || user.name,
+      role: user.role,
+    });
   };
 
   const logoutUser = async () => {
-    setCurrentUser(null);
-    setIsAdminLoggedIn(false);
-    setAdminUser(null);
-    setCurrentEditor(null);
+    authRequestVersionRef.current += 1;
+    setIsAuthChecking(false);
+    clearAuthState();
     try {
       const backendUrl = BACKEND_URL;
       const csrfToken = localStorage.getItem("csrfToken");
@@ -478,7 +662,7 @@ export const AppDataProvider = ({ children }) => {
   });
 
   const getEditorStats = (editorId) => {
-    const editorSubmissions = submissions.filter((s) => s.assignedTo === editorId);
+    const editorSubmissions = submissions.filter((s) => Number(s.assignedTo) === Number(editorId));
     return {
       totalAssigned: editorSubmissions.length,
       pendingReview: editorSubmissions.filter((s) => s.status === "Under Review").length,
@@ -494,14 +678,25 @@ export const AppDataProvider = ({ children }) => {
     submissions,
     settings,
     users,
+    userDirectory,
+    recentPublished,
+    profileSummary,
+    dashboardAnalytics,
     currentUser,
     currentEditor,
     isAdminLoggedIn,
     adminUser,
     isAuthChecking,
     checkAuth,
+    fetchDashboardAnalytics,
+    fetchProfileSummary,
+    updateProfileSummary,
+    fetchUserDirectory,
+    fetchRecentPublished,
+    fetchSubmissions,
     promoteUserToEditor,
     updateEditorJournalCategory,
+    uploadEditorProfileImage,
     // Submission functions
     addSubmission,
     assignSubmission,

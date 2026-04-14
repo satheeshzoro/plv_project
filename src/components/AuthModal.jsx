@@ -4,13 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
-import { extractApiError, normalizeEmail, normalizeText } from "@/lib/api";
+import { extractApiError, normalizeEmail, normalizeText, resolveBackendUrl } from "@/lib/api";
 import logoImage from "../../assets/logo.png";
 import mainImage from "../../assets/main.png";
 
 const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
   const { toast } = useToast();
-  const { checkAuth } = useAppData();
+  const { checkAuth, loginAdmin, loginEditor, loginUser } = useAppData();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -28,7 +28,7 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
     setIsLoading(true);
 
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+      const backendUrl = resolveBackendUrl();
       const payload = {
         name: normalizeText(formData.name),
         email: normalizeEmail(formData.email),
@@ -112,15 +112,46 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
           console.error("Failed to refresh CSRF token after login", e);
         }
 
+        const normalizedRole = data.role?.toUpperCase();
+        const userData = {
+          ...data,
+          username: data.full_name || data.name || data.username || payload.email.split("@")[0],
+        };
+
+        if (normalizedRole === "ADMIN") {
+          loginAdmin({
+            name: data.full_name || userData.username,
+            email: data.email,
+            role: data.role,
+          });
+        } else if (normalizedRole === "EDITOR") {
+          loginEditor({
+            id: data.id,
+            name: data.full_name || userData.username,
+            email: data.email,
+            role: data.role,
+            profile_image: data.profile_image || null,
+            requires_profile_image: Boolean(data.requires_profile_image),
+            mapped_journal_category: data.mapped_journal_category || "",
+          });
+        } else {
+          loginUser({
+            id: data.id,
+            username: userData.username,
+            email: data.email,
+            role: data.role,
+          });
+        }
+
+        checkAuth().catch((authError) => {
+          console.error("Post-login auth refresh failed", authError);
+        });
+
         toast({
           title: "Welcome Back!",
           description: "You have been signed in successfully.",
         });
-        
-        await checkAuth();
-        
-        // Pass user data to parent (handle variations in API response fields)
-        const userData = { ...data, username: data.full_name || data.name || data.username || payload.email.split('@')[0] };
+
         onSuccess(userData);
         onClose();
       }

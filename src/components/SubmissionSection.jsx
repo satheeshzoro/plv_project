@@ -28,7 +28,7 @@ const SubmissionSection = ({ isLoggedIn, onRequireAuth }) => {
     
     if (!isLoggedIn) {
       // Redirect to the combined submit and register page
-      navigate("/submit-and-register");
+      navigate("/publish");
       return;
     }
 

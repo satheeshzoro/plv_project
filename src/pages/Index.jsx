@@ -79,11 +79,11 @@ const Index = () => {
 
           logoutUser();
         }}
-        submitPath={currentUser ? "/publish" : "/submit-and-register"}
+        submitPath="/publish"
       />
       
       <main>
-        <HeroSection submitPath={currentUser ? "/publish" : "/submit-and-register"} />
+        <HeroSection submitPath="/publish" />
         <SubmissionProcessSection />
         <EditorCarouselSection />
         <TrendingArticles />

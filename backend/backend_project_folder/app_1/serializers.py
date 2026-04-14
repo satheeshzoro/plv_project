@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from PIL import Image
 
 User = get_user_model()
 
@@ -141,10 +142,31 @@ from rest_framework import serializers
 User = get_user_model()
 
 class EditorSerializer(serializers.ModelSerializer):
+    profile_image = serializers.SerializerMethodField()
+    requires_profile_image = serializers.SerializerMethodField()
+
+    def get_profile_image(self, obj):
+        if not obj.profile_image:
+            return None
+        request = self.context.get("request")
+        url = obj.profile_image.url
+        return request.build_absolute_uri(url) if request else url
+
+    def get_requires_profile_image(self, obj):
+        return obj.role == "EDITOR" and not bool(obj.profile_image)
 
     class Meta:
         model = User
-        fields = ("id", "email", "full_name", "pen_name", "country", "mapped_journal_category")
+        fields = (
+            "id",
+            "email",
+            "full_name",
+            "pen_name",
+            "country",
+            "mapped_journal_category",
+            "profile_image",
+            "requires_profile_image",
+        )
 
 
 # core/serializers.py
@@ -194,3 +216,29 @@ class EditorCategoryMappingSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ("mapped_journal_category",)
+
+
+class EditorProfileImageUploadSerializer(serializers.ModelSerializer):
+    profile_image = serializers.ImageField(required=True)
+
+    class Meta:
+        model = User
+        fields = ("profile_image",)
+
+    def validate_profile_image(self, image_file):
+        max_size = int(1.5 * 1024 * 1024)
+        if image_file.size > max_size:
+            raise serializers.ValidationError("Image size must be at most 1.5 MB.")
+
+        try:
+            img = Image.open(image_file)
+            width, height = img.size
+        except Exception as exc:
+            raise serializers.ValidationError("Invalid image file.") from exc
+        finally:
+            image_file.seek(0)
+
+        if width < 64 or height < 64 or width > 500 or height > 500:
+            raise serializers.ValidationError("Image dimensions must be between 64x64 and 500x500 pixels.")
+
+        return image_file
