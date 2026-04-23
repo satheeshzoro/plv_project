@@ -11,14 +11,30 @@ const mapStatusFromApi = (status) => {
     UNDER_REVIEW: "Under Review",
     COMPLETED: "Completed",
     PUBLISHED: "Published",
+    ARCHIVED: "Archived",
     REJECTED: "Rejected",
   };
   return statusMap[status] || status;
 };
 
+const mapArticleToCard = (article) => ({
+  id: article.id,
+  title: article.title,
+  author: article.author_name,
+  category: article.category,
+  journalName: article.journal_name,
+  publishedDate: article.published_date,
+  image: article.image,
+  excerpt: article.excerpt || "",
+  file: article.file,
+  downloads: article.downloads || 0,
+  readTime: article.read_time ? `${article.read_time} min read` : "5 min read",
+});
+
 export const AppDataProvider = ({ children }) => {
   const [editors, setEditors] = useState([]);
   const [journals, setJournals] = useState([]);
+  const [archivedJournals, setArchivedJournals] = useState([]);
   const [trendingArticles, setTrendingArticles] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [settings, setSettings] = useState({
@@ -117,29 +133,30 @@ export const AppDataProvider = ({ children }) => {
   }, []);
 
   // --- Data Fetching ---
-
   const fetchJournals = useCallback(async () => {
     try {
       const data = await authFetch("/api/journals/");
-      // Map API response to frontend structure if needed
-      const mappedJournals = data.map(j => ({
-        id: j.id,
-        title: j.title,
-        author: j.author_name,
-        category: j.category,
-        journalName: j.journal_name,
-        publishedDate: j.published_date,
-        image: j.image,
-        excerpt: j.excerpt || "",
-        file: j.file,
-        downloads: j.downloads || 0,
-        readTime: j.read_time ? `${j.read_time} min read` : "5 min read"
-      }));
+      const mappedJournals = data.map(mapArticleToCard);
       setJournals(mappedJournals);
     } catch (error) {
       console.error("Failed to fetch journals:", error);
     }
   }, [authFetch]);
+
+  const fetchArchivedJournals = useCallback(async () => {
+    if (!isAdminLoggedIn) {
+      setArchivedJournals([]);
+      return;
+    }
+
+    try {
+      const data = await authFetch("/api/admin/journals/archived/");
+      setArchivedJournals(data.map(mapArticleToCard));
+    } catch (error) {
+      console.error("Failed to fetch archived journals:", error);
+      setArchivedJournals([]);
+    }
+  }, [authFetch, isAdminLoggedIn]);
 
   const fetchTrendingArticles = useCallback(async () => {
     try {
@@ -358,6 +375,7 @@ export const AppDataProvider = ({ children }) => {
       fetchEditors();
       fetchUsers();
       fetchUserDirectory();
+      fetchArchivedJournals();
       fetchSubmissions();
       fetchRecentPublished();
       fetchProfileSummary();
@@ -382,10 +400,11 @@ export const AppDataProvider = ({ children }) => {
       setSubmissions([]); // Clear sensitive data on logout
       setUserDirectory([]);
       setRecentPublished([]);
+      setArchivedJournals([]);
       setProfileSummary(null);
       setDashboardAnalytics(null);
     }
-  }, [isAdminLoggedIn, currentEditor, currentUser, fetchDashboardAnalytics, fetchEditors, fetchProfileSummary, fetchRecentPublished, fetchSubmissions, fetchUserDirectory, fetchUsers]);
+  }, [isAdminLoggedIn, currentEditor, currentUser, fetchArchivedJournals, fetchDashboardAnalytics, fetchEditors, fetchProfileSummary, fetchRecentPublished, fetchSubmissions, fetchUserDirectory, fetchUsers]);
 
   // Submission functions
   const addSubmission = async (formData) => {
@@ -440,6 +459,38 @@ export const AppDataProvider = ({ children }) => {
   const publishSubmission = async (submissionId) => {
     // Backend handles creation of journal entry on status change
     await updateSubmissionStatus(submissionId, "PUBLISHED");
+  };
+
+  const adminPublishArticle = async (formData) => {
+    const result = await authFetch("/api/admin/journals/publish/", {
+      method: "POST",
+      body: formData,
+    });
+    await Promise.all([fetchJournals(), fetchSubmissions(), fetchRecentPublished()]);
+    return result;
+  };
+
+  const archiveJournal = async (journalId) => {
+    await authFetch(`/api/admin/journals/${journalId}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: "archive" }),
+    });
+    await Promise.all([fetchJournals(), fetchArchivedJournals(), fetchSubmissions(), fetchRecentPublished()]);
+  };
+
+  const unarchiveJournal = async (journalId) => {
+    await authFetch(`/api/admin/journals/${journalId}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ action: "unarchive" }),
+    });
+    await Promise.all([fetchJournals(), fetchArchivedJournals(), fetchSubmissions(), fetchRecentPublished()]);
+  };
+
+  const deleteJournal = async (journalId) => {
+    await authFetch(`/api/admin/journals/${journalId}/`, {
+      method: "DELETE",
+    });
+    await Promise.all([fetchJournals(), fetchArchivedJournals(), fetchSubmissions(), fetchRecentPublished()]);
   };
 
   // Analytics functions
@@ -674,6 +725,7 @@ export const AppDataProvider = ({ children }) => {
     // Data
     editors,
     journals,
+    archivedJournals,
     trendingArticles,
     submissions,
     settings,
@@ -702,6 +754,10 @@ export const AppDataProvider = ({ children }) => {
     assignSubmission,
     updateSubmissionStatus,
     publishSubmission,
+    adminPublishArticle,
+    archiveJournal,
+    unarchiveJournal,
+    deleteJournal,
     // Analytics
     recordArticleView,
     recordArticleDownload,

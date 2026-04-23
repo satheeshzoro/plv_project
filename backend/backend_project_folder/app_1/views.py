@@ -16,7 +16,7 @@ from rest_framework.response import Response
 from rest_framework.generics import ListAPIView, CreateAPIView, ListCreateAPIView
 from rest_framework.authentication import SessionAuthentication
 
-from .models import Article, ArticleView, SiteSettings
+from .models import Article, ArticleView, SiteSettings, SiteVisitorCounter
 from .serializers import *
 from .permissions import IsAdmin, IsEditor, IsUser
 
@@ -151,18 +151,6 @@ class AssignEditorAPIView(APIView):
 
         editor = get_object_or_404(User, pk=editor_id, role="EDITOR")
 
-        if not editor.mapped_journal_category:
-            return Response(
-                {"detail": "Editor must have a mapped journal category before assignment."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if editor.mapped_journal_category != article.category:
-            return Response(
-                {"detail": "Editor can only be assigned submissions from their mapped journal category."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         if article.status not in ["PENDING", "UNDER_REVIEW"]:
             return Response(
                 {"detail": "Only pending or under-review submissions can be assigned."},
@@ -178,8 +166,6 @@ class EditorTasksAPIView(APIView):
     permission_classes = [IsEditor]
     def get(self, request):
         articles = Article.objects.filter(assigned_to=request.user)
-        if request.user.mapped_journal_category:
-            articles = articles.filter(category=request.user.mapped_journal_category)
         serializer = ArticleListSerializer(articles, many=True, context={"request": request})
         return Response(serializer.data)
 
@@ -189,6 +175,84 @@ class PublishedArticlesAPIView(APIView):
         articles = Article.objects.filter(status="PUBLISHED")
         serializer = ArticleListSerializer(articles, many=True, context={"request": request})
         return Response(serializer.data)
+
+
+class AdminArchivedJournalsAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        articles = Article.objects.filter(status="ARCHIVED").order_by("-published_date", "-created_at")
+        serializer = ArticleListSerializer(articles, many=True, context={"request": request})
+        return Response(serializer.data)
+
+
+class AdminJournalModerationAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def patch(self, request, pk):
+        article = get_object_or_404(Article, pk=pk)
+        action = (request.data.get("action") or "archive").strip().lower()
+
+        if action == "archive":
+            if article.status != "PUBLISHED":
+                return Response(
+                    {"detail": "Only published journals can be archived."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            article.status = "ARCHIVED"
+            article.save(update_fields=["status"])
+            return Response({"message": "Journal archived successfully."}, status=status.HTTP_200_OK)
+
+        if action == "unarchive":
+            if article.status != "ARCHIVED":
+                return Response(
+                    {"detail": "Only archived journals can be unarchived."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            article.status = "PUBLISHED"
+            if not article.published_date:
+                article.published_date = timezone.now().date()
+                article.save(update_fields=["status", "published_date"])
+            else:
+                article.save(update_fields=["status"])
+            return Response({"message": "Journal unarchived successfully."}, status=status.HTTP_200_OK)
+
+        return Response(
+            {"detail": "Invalid action. Use 'archive' or 'unarchive'."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def delete(self, request, pk):
+        article = get_object_or_404(Article, pk=pk)
+
+        if article.status not in ["PUBLISHED", "ARCHIVED"]:
+            return Response(
+                {"detail": "Only published or archived journals can be deleted from this endpoint."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        article.delete()
+        return Response({"message": "Journal deleted successfully."}, status=status.HTTP_200_OK)
+
+
+class AdminPublishedArticleCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def post(self, request):
+        serializer = AdminPublishedArticleCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        article = serializer.save(
+            submitted_by=request.user,
+            status="PUBLISHED",
+            published_date=timezone.now().date(),
+        )
+        return Response(
+            {
+                "message": "Article published successfully.",
+                "article": ArticleListSerializer(article, context={"request": request}).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 class IncrementArticleViewAPIView(APIView):
     permission_classes = [AllowAny]
@@ -283,12 +347,6 @@ class UpdateSubmissionStatusAPIView(APIView):
         if request.user.role == "EDITOR":
             if article.assigned_to != request.user:
                 return Response({"error": "Not your assigned article"}, status=403)
-
-            if not request.user.mapped_journal_category:
-                return Response({"error": "No journal category mapped to this editor"}, status=403)
-
-            if article.category != request.user.mapped_journal_category:
-                return Response({"error": "This submission is outside your mapped journal category"}, status=403)
 
             if new_status not in ["COMPLETED", "REJECTED"]:
                 return Response({"error": "Invalid status for editor"}, status=400)
@@ -514,8 +572,6 @@ class DashboardAnalyticsAPIView(APIView):
         submissions_qs = Article.objects.all()
         if request.user.role == "EDITOR":
             submissions_qs = submissions_qs.filter(assigned_to=request.user)
-            if request.user.mapped_journal_category:
-                submissions_qs = submissions_qs.filter(category=request.user.mapped_journal_category)
 
         year_submissions = submissions_qs.filter(created_at__year=year)
         monthly_counts = (
@@ -534,8 +590,6 @@ class DashboardAnalyticsAPIView(APIView):
         visitors_qs = ArticleView.objects.all()
         if request.user.role == "EDITOR":
             visitors_qs = visitors_qs.filter(article__assigned_to=request.user)
-            if request.user.mapped_journal_category:
-                visitors_qs = visitors_qs.filter(article__category=request.user.mapped_journal_category)
 
         visitors_qs = visitors_qs.filter(created_at__year=year)
         if month:
@@ -545,8 +599,6 @@ class DashboardAnalyticsAPIView(APIView):
         article_metrics_qs = Article.objects.filter(status="PUBLISHED")
         if request.user.role == "EDITOR":
             article_metrics_qs = article_metrics_qs.filter(assigned_to=request.user)
-            if request.user.mapped_journal_category:
-                article_metrics_qs = article_metrics_qs.filter(category=request.user.mapped_journal_category)
 
         article_metrics = [
             {
@@ -661,3 +713,17 @@ class SiteSettingsAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class SiteVisitorCountAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        counter = SiteVisitorCounter.get_solo()
+        return Response({"count": counter.count}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        counter = SiteVisitorCounter.get_solo()
+        SiteVisitorCounter.objects.filter(pk=counter.pk).update(count=F("count") + 1)
+        counter.refresh_from_db(fields=["count"])
+        return Response({"count": counter.count}, status=status.HTTP_200_OK)

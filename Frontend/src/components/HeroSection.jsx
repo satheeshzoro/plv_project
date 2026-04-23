@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Award, BadgeCheck, BookOpen, PlayCircle, Users } from "lucide-react";
+import { ArrowRight, Award, BadgeCheck, BookOpen, Eye, PlayCircle, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/context/ThemeContext";
+import { resolveBackendUrl } from "@/lib/api";
 import doctorHero from "../../assets/main.png";
 import "./HeroSection.css";
 
@@ -11,14 +13,53 @@ const STATS = [
   { icon: Award, value: "500+", label: "Partner Institutions" },
 ];
 
+const BACKEND_URL = resolveBackendUrl();
+
 const HeroSection = ({ submitPath = "/publish" }) => {
   const navigate = useNavigate();
   const { isDark } = useTheme();
+  const [viewerCount, setViewerCount] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const updateVisitorCount = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/site-visitors/`, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (!response.ok) {
+          throw new Error("Failed to increment visitor count");
+        }
+        const data = await response.json();
+        if (isMounted) {
+          setViewerCount(data.count ?? null);
+        }
+      } catch (error) {
+        console.error("Failed to update visitor count:", error);
+      }
+    };
+
+    updateVisitorCount();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <section className={`hero-shell ${isDark ? "hero-shell-dark" : ""}`}>
       <div className="container py-12 md:py-16 lg:py-20">
         <div className={`hero-card ${isDark ? "hero-card-dark" : ""}`}>
+          <div className={`hero-visitor-pill ${isDark ? "hero-visitor-pill-dark" : ""}`}>
+            <Eye className="h-4 w-4" />
+            <span className="hero-visitor-label">Viewers</span>
+            <span className="hero-visitor-value">
+              {viewerCount === null ? "..." : viewerCount.toLocaleString()}
+            </span>
+          </div>
+
           <div className="hero-copy">
             <div className={`hero-kicker ${isDark ? "hero-kicker-dark" : ""}`}>
               <span className="hero-kicker-dot" />
@@ -51,7 +92,6 @@ const HeroSection = ({ submitPath = "/publish" }) => {
             <div className={`hero-cta-bar ${isDark ? "hero-cta-bar-dark" : ""}`}>
               <div className="hero-cta-copy">
                 <span className="hero-cta-label">Start your manuscript journey</span>
-                <span className="hero-cta-value">editorial workflow, author submission, publication control</span>
               </div>
               <Button
                 size="lg"

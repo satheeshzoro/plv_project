@@ -162,7 +162,7 @@ const EditorArticleView = () => {
               <Button variant="outline" className="flex-1" size="lg" asChild>
                 <a href={getFullUrl(submission.fileUrl)} target="_blank" rel="noopener noreferrer">
                   <Download className="w-5 h-5 mr-2" />
-                  View PDF
+                  View Manuscript
                 </a>
               </Button>
             </div>

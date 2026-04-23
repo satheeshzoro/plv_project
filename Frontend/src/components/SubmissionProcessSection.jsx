@@ -12,62 +12,74 @@ import { useTheme } from "@/context/ThemeContext";
 const PROCESS_STEPS = [
   {
     id: 1,
-    label: "Submit",
-    title: "Article Submission",
+    label: "Submission",
+    title: "Submission",
     icon: FileUp,
-    summary: "Authors upload the manuscript, cover image, and core article details.",
+    summary: "Authors submit manuscript files and required publication details.",
     points: [
-      "Create or sign in to your author account.",
-      "Fill in article type, journal category, contact details, and word count.",
-      "Upload the manuscript PDF and supporting cover image.",
+      "Provide article and author information.",
+      "Select journal and article type.",
+      "Upload manuscript and cover image.",
     ],
   },
   {
     id: 2,
-    label: "Verify",
-    title: "Initial Verification",
+    label: "Pre-QC",
+    title: "Pre-QC",
     icon: FileSearch,
-    summary: "The editorial team checks formatting, completeness, and journal-fit requirements.",
+    summary: "The editorial team performs preliminary quality and completeness checks.",
     points: [
-      "The manuscript is reviewed for missing fields and upload quality.",
-      "Basic screening confirms scope, originality, and submission readiness.",
-      "Authors are notified if anything essential is incomplete.",
+      "Basic formatting and scope are reviewed.",
+      "Missing information is identified.",
+      "Submissions move forward only after initial quality check.",
     ],
   },
   {
     id: 3,
-    label: "Revise",
-    title: "Corrections And Updates",
+    label: "Review",
+    title: "Review Process",
     icon: RefreshCcw,
-    summary: "If changes are needed, the author updates the manuscript and resubmits the revised version.",
+    summary: "Assigned reviewers and editors evaluate the manuscript in detail.",
     points: [
-      "Editorial comments or reviewer notes are shared with the author.",
-      "The author updates content, references, formatting, or metadata.",
-      "The revised manuscript is rechecked before final approval.",
+      "Editorial observations are recorded.",
+      "Technical and content checks are completed.",
+      "Review outcomes are prepared for final decision.",
     ],
   },
   {
     id: 4,
     label: "Pay",
-    title: "Processing Fee",
+    title: "Pay",
     icon: CreditCard,
-    summary: "Once the paper is approved for publication, payment and documentation are confirmed.",
+    summary: "Required publication payment is completed and verified.",
     points: [
-      "Authors receive publication or processing fee instructions.",
-      "Payment confirmation is checked against the manuscript record.",
-      "The article moves to the final publishing queue after clearance.",
+      "Payment instructions are shared with the author.",
+      "Transaction confirmation is validated.",
+      "Article moves to final decision stage.",
     ],
   },
   {
     id: 5,
-    label: "Publish",
-    title: "Publication",
-    icon: Rocket,
-    summary: "The final article is published and made available to readers on the platform.",
+    label: "Decision",
+    title: "Editorial Decision",
+    icon: BadgeCheck,
+    summary: "The editorial team makes the final acceptance decision.",
     points: [
-      "The accepted version is prepared for release.",
-      "Article metadata and files are published to the journal listing.",
-      "Readers can access the published article and the author can track status.",
+      "Review and QC results are consolidated.",
+      "Final editorial decision is issued.",
+      "Accepted papers proceed to publication.",
+    ],
+  },
+  {
+    id: 6,
+    label: "Publish",
+    title: "Publish",
+    icon: Rocket,
+    summary: "The accepted manuscript is published for readers.",
+    points: [
+      "Final metadata and files are released.",
+      "Article appears in the journal listing.",
+      "Readers can view and download the published work.",
     ],
   },
 ];
@@ -103,13 +115,13 @@ const SubmissionProcessSection = () => {
             Follow the publishing process step by step
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
-            Click each number to see what happens from manuscript submission to verification, updates, payment, and final publication.
+            Click each number to see every stage from submission to publish.
           </p>
         </div>
 
         <div className="mt-10 rounded-[28px] border border-border bg-card p-5 shadow-soft md:p-8">
           <div className="flex items-center justify-center">
-            <div className="grid w-full max-w-5xl grid-cols-5 gap-3 md:gap-5">
+            <div className="grid w-full max-w-5xl grid-cols-3 gap-3 md:grid-cols-6 md:gap-5">
               {PROCESS_STEPS.map((step) => (
                 <div key={step.id} className="relative flex flex-col items-center">
                   {step.id !== PROCESS_STEPS.length && (

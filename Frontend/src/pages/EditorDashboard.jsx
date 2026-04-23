@@ -46,6 +46,7 @@ import {
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
+import { resolveBackendUrl } from "@/lib/api";
 import logoImage from "../../assets/logo.png";
 import mainImage from "../../assets/main.png";
 
@@ -70,6 +71,8 @@ const StatCard = ({ title, value, icon: Icon, variant = "default" }) => {
     </div>
   );
 };
+
+const BACKEND_URL = resolveBackendUrl();
 
 const EditorDashboard = () => {
   const navigate = useNavigate();
@@ -127,6 +130,14 @@ const EditorDashboard = () => {
   const myRecentPublished = recentPublished.filter(
     (item) => item.author_email === currentEditor.email || item.author_name === currentEditor.name,
   );
+
+  const getSubmissionFileUrl = (fileUrl) => {
+    if (!fileUrl) return "";
+    if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
+      return fileUrl;
+    }
+    return `${BACKEND_URL}${fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`}`;
+  };
 
   function handleLogout() {
     logoutEditor();
@@ -364,18 +375,43 @@ const EditorDashboard = () => {
                             </span>
                           </TableCell>
                           <TableCell>
-                            {task.status === "Under Review" && (
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => navigate(`/editor/submission/${task.id}`)}
-                              >
-                                Review
-                              </Button>
-                            )}
-                            {(task.status === "Completed" || task.status === "Rejected") && (
-                              <span className="text-sm text-muted-foreground">No actions</span>
-                            )}
+                            <div className="flex flex-wrap gap-2">
+                              {task.fileUrl && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      window.open(getSubmissionFileUrl(task.fileUrl), "_blank", "noopener,noreferrer");
+                                    }}
+                                  >
+                                    View Article
+                                  </Button>
+                                  <a
+                                    href={getSubmissionFileUrl(task.fileUrl)}
+                                    download={task.fileName || `submission-${task.id}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <Button size="sm" variant="outline">
+                                      Download
+                                    </Button>
+                                  </a>
+                                </>
+                              )}
+                              {task.status === "Under Review" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => navigate(`/editor/submission/${task.id}`)}
+                                >
+                                  Review
+                                </Button>
+                              )}
+                              {(task.status === "Completed" || task.status === "Rejected") && !task.fileUrl && (
+                                <span className="text-sm text-muted-foreground">No actions</span>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}

@@ -461,12 +461,12 @@ const Publish = () => {
               {/* File Upload */}
               <div className="space-y-2">
                 <Label>
-                  Upload PDF <span className="text-destructive">*</span>
+                  Upload Manuscript File (PDF/DOC/DOCX) <span className="text-destructive">*</span>
                 </Label>
                 <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors">
                   <input
                     type="file"
-                    accept=".pdf"
+                    accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     onChange={handleFileChange}
                     className="hidden"
                     id="file-upload"
@@ -477,7 +477,7 @@ const Publish = () => {
                       <p className="text-primary font-medium">{file.name}</p>
                     ) : (
                       <>
-                        <p className="text-foreground font-medium">Click to upload your PDF</p>
+                        <p className="text-foreground font-medium">Click to upload your manuscript file</p>
                         <p className="text-sm text-muted-foreground mt-1">Max file size: 20MB</p>
                       </>
                     )}

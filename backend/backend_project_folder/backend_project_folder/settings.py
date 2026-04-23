@@ -137,13 +137,16 @@ ASGI_APPLICATION = 'backend_project_folder.asgi.application'
 
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',  # PostgreSQL backend
-        'NAME': 'PLV_database',               # Replace with your DB name
-        'USER': 'postgres',                # Replace with your DB user
-        'PASSWORD': '26062004',                # Replace with your DB password
-        'HOST': 'host.docker.internal',                        # Or your DB server IP/domain
-        'PORT': '5432',                             # Default PostgreSQL port
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("DB_NAME", "PLV_database"),
+        "USER": os.getenv("DB_USER", "postgres"),
+        "PASSWORD": os.getenv("DB_PASSWORD", "26062004"),
+        # Local default for running manage.py from host machine.
+        # In Docker, set DB_HOST explicitly (for example host.docker.internal or db service name).
+        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+        "PORT": os.getenv("DB_PORT", "5432"),
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
     }
 }
 

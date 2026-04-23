@@ -32,6 +32,9 @@ from .views import (
     UpdateSubmissionStatusAPIView,
     RecentPublishedAPIView,
     DashboardAnalyticsAPIView,
+    AdminArchivedJournalsAPIView,
+    AdminJournalModerationAPIView,
+    AdminPublishedArticleCreateAPIView,
 )
 
 from .views import (
@@ -47,6 +50,7 @@ from .views import (
 
 from .views import (
     SiteSettingsAPIView,
+    SiteVisitorCountAPIView,
 )
 
 urlpatterns = [
@@ -73,6 +77,21 @@ urlpatterns = [
 
     # Public journals (published only)
     path("journals/", PublishedArticlesAPIView.as_view(), name="published-journals"),
+    path(
+        "admin/journals/archived/",
+        AdminArchivedJournalsAPIView.as_view(),
+        name="admin-archived-journals",
+    ),
+    path(
+        "admin/journals/<int:pk>/",
+        AdminJournalModerationAPIView.as_view(),
+        name="admin-journal-moderation",
+    ),
+    path(
+        "admin/journals/publish/",
+        AdminPublishedArticleCreateAPIView.as_view(),
+        name="admin-journal-publish",
+    ),
 
     # Analytics & Trending
     path("articles/<int:pk>/view/", IncrementArticleViewAPIView.as_view(), name="article-view"),
@@ -110,4 +129,5 @@ urlpatterns = [
 
     # ===================== SITE SETTINGS =====================
     path("settings/", SiteSettingsAPIView.as_view(), name="site-settings"),
+    path("site-visitors/", SiteVisitorCountAPIView.as_view(), name="site-visitors"),
 ]

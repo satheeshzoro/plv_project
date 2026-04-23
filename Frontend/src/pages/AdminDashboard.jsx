@@ -5,12 +5,13 @@ import {
   Users,
   BookOpen,
   FileText,
-  Image,
   Settings,
   LogOut,
-  Plus,
   Trash2,
+  Archive,
+  Undo2,
   UserPlus,
+  Upload,
   LineChart as LineChartIcon,
   Newspaper,
 } from "lucide-react";
@@ -45,6 +46,8 @@ import {
 } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
+import { resolveBackendUrl } from "@/lib/api";
+import { ARTICLE_TYPES, JOURNAL_CATEGORY_BY_TITLE, JOURNAL_OPTIONS } from "@/data/journalOptions";
 import logoImage from "../../assets/logo.png";
 import mainImage from "../../assets/main.png";
 
@@ -81,6 +84,8 @@ const JOURNAL_CATEGORY_OPTIONS = [
   "Environmental Science",
 ];
 
+const BACKEND_URL = resolveBackendUrl();
+
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -94,21 +99,36 @@ const AdminDashboard = () => {
     promoteUserToEditor,
     updateEditorJournalCategory,
     journals,
+    archivedJournals,
     submissions,
     assignSubmission,
     publishSubmission,
+    adminPublishArticle,
+    archiveJournal,
+    unarchiveJournal,
+    deleteJournal,
     settings,
     updateSettings,
-    addCarouselImage,
-    removeCarouselImage,
     getStats,
     recentPublished,
     dashboardAnalytics,
     fetchDashboardAnalytics,
   } = useAppData();
 
-  const [newCarouselUrl, setNewCarouselUrl] = useState("");
   const [editingSettings, setEditingSettings] = useState(settings);
+  const [isPublishingArticle, setIsPublishingArticle] = useState(false);
+  const [publishFile, setPublishFile] = useState(null);
+  const [publishImage, setPublishImage] = useState(null);
+  const [publishImagePreview, setPublishImagePreview] = useState(null);
+  const [publishForm, setPublishForm] = useState({
+    title: "",
+    authorName: "",
+    authorEmail: "",
+    journalName: "",
+    journalType: "",
+    articleType: "",
+    wordCount: "",
+  });
   const [analyticsFilters, setAnalyticsFilters] = useState({
     year: String(new Date().getFullYear()),
     month: "all",
@@ -142,16 +162,90 @@ const AdminDashboard = () => {
     navigate("/");
   };
 
-  const handleAddCarouselImage = () => {
-    if (!newCarouselUrl) return;
-    addCarouselImage(newCarouselUrl);
-    setNewCarouselUrl("");
-    toast({ title: "Carousel image added!" });
-  };
-
   const handleSaveSettings = () => {
     updateSettings(editingSettings);
     toast({ title: "Settings saved successfully!" });
+  };
+
+  const handlePublishFormChange = (field, value) => {
+    if (field === "journalName") {
+      setPublishForm((prev) => ({
+        ...prev,
+        journalName: value,
+        journalType: JOURNAL_CATEGORY_BY_TITLE[value] || "",
+      }));
+      return;
+    }
+    setPublishForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleDirectPublish = async (e) => {
+    e.preventDefault();
+    if (
+      !publishForm.title ||
+      !publishForm.authorName ||
+      !publishForm.authorEmail ||
+      !publishForm.journalName ||
+      !publishForm.journalType ||
+      !publishForm.articleType ||
+      !publishForm.wordCount ||
+      !publishFile ||
+      !publishImage
+    ) {
+      toast({
+        title: "Incomplete form",
+        description: "Please fill all required fields and upload both image and manuscript file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsPublishingArticle(true);
+    try {
+      const formData = new FormData();
+      formData.append("title", publishForm.title.trim());
+      formData.append("author_name", publishForm.authorName.trim());
+      formData.append("author_email", publishForm.authorEmail.trim().toLowerCase());
+      formData.append("journal_name", publishForm.journalName);
+      formData.append("category", publishForm.journalType);
+      formData.append("article_type", publishForm.articleType);
+      formData.append("word_count", publishForm.wordCount);
+      formData.append("file", publishFile);
+      formData.append("image", publishImage);
+
+      await adminPublishArticle(formData);
+
+      setPublishForm({
+        title: "",
+        authorName: "",
+        authorEmail: "",
+        journalName: "",
+        journalType: "",
+        articleType: "",
+        wordCount: "",
+      });
+      setPublishFile(null);
+      setPublishImage(null);
+      setPublishImagePreview(null);
+
+      toast({ title: "Article published successfully" });
+    } catch (error) {
+      toast({
+        title: "Publishing failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsPublishingArticle(false);
+    }
+  };
+
+  const getSubmissionFileUrl = (fileUrl) => {
+    if (!fileUrl) return "";
+    if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
+      return fileUrl;
+    }
+    return `${BACKEND_URL}${fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`}`;
   };
 
   return (
@@ -208,13 +302,17 @@ const AdminDashboard = () => {
               <BookOpen className="w-4 h-4 mr-2" />
               Journals
             </TabsTrigger>
+            <TabsTrigger value="archived" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Archive className="w-4 h-4 mr-2" />
+              Archived
+            </TabsTrigger>
             <TabsTrigger value="submissions" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <FileText className="w-4 h-4 mr-2" />
               Submissions
             </TabsTrigger>
-            <TabsTrigger value="carousel" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <Image className="w-4 h-4 mr-2" />
-              Carousel
+            <TabsTrigger value="direct-publish" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Upload className="w-4 h-4 mr-2" />
+              Direct Publish
             </TabsTrigger>
             <TabsTrigger value="settings" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Settings className="w-4 h-4 mr-2" />
@@ -377,6 +475,7 @@ const AdminDashboard = () => {
                     <TableHead>Author</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Published</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -386,8 +485,149 @@ const AdminDashboard = () => {
                       <TableCell>{journal.author}</TableCell>
                       <TableCell>{journal.category}</TableCell>
                       <TableCell>{journal.publishedDate}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              const confirmed = window.confirm(
+                                `Archive "${journal.title}"? It will be hidden from users.`
+                              );
+                              if (!confirmed) return;
+                              try {
+                                await archiveJournal(journal.id);
+                                toast({ title: "Journal archived" });
+                              } catch (error) {
+                                toast({
+                                  title: "Archive failed",
+                                  description: error.message,
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            <Archive className="w-4 h-4 mr-2" />
+                            Archive
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={async () => {
+                              const confirmed = window.confirm(
+                                `Delete "${journal.title}" permanently? This cannot be undone.`
+                              );
+                              if (!confirmed) return;
+                              try {
+                                await deleteJournal(journal.id);
+                                toast({ title: "Journal deleted" });
+                              } catch (error) {
+                                toast({
+                                  title: "Delete failed",
+                                  description: error.message,
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
+                  {journals.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        No published journals available.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="archived">
+            <div className="bg-card border border-border rounded-lg p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="font-serif text-xl font-semibold">Archived Journals</h2>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Author</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Published</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {archivedJournals.map((journal) => (
+                    <TableRow key={journal.id}>
+                      <TableCell className="font-medium max-w-xs truncate">{journal.title}</TableCell>
+                      <TableCell>{journal.author}</TableCell>
+                      <TableCell>{journal.category}</TableCell>
+                      <TableCell>{journal.publishedDate || "-"}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                await unarchiveJournal(journal.id);
+                                toast({ title: "Journal unarchived" });
+                              } catch (error) {
+                                toast({
+                                  title: "Unarchive failed",
+                                  description: error.message,
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            <Undo2 className="w-4 h-4 mr-2" />
+                            Unarchive
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={async () => {
+                              const confirmed = window.confirm(
+                                `Delete "${journal.title}" permanently? This cannot be undone.`
+                              );
+                              if (!confirmed) return;
+                              try {
+                                await deleteJournal(journal.id);
+                                toast({ title: "Journal deleted" });
+                              } catch (error) {
+                                toast({
+                                  title: "Delete failed",
+                                  description: error.message,
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {archivedJournals.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        No archived journals available.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -438,11 +678,34 @@ const AdminDashboard = () => {
                         <TableCell className="max-w-xs whitespace-pre-wrap text-sm text-muted-foreground">
                           {sub.editorReport || "-"}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            {(sub.status === "Pending" || sub.status === "Under Review") && (
-                              <Select onValueChange={async (editorId) => {
-                                const editorName = editors.find((e) => String(e.id) === String(editorId))?.name || "selected editor";
+                          <TableCell>
+                            <div className="flex gap-2">
+                              {sub.fileUrl && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      window.open(getSubmissionFileUrl(sub.fileUrl), "_blank", "noopener,noreferrer");
+                                    }}
+                                  >
+                                    View Article
+                                  </Button>
+                                  <a
+                                    href={getSubmissionFileUrl(sub.fileUrl)}
+                                    download={sub.fileName || `submission-${sub.id}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <Button size="sm" variant="outline">
+                                      Download
+                                    </Button>
+                                  </a>
+                                </>
+                              )}
+                              {(sub.status === "Pending" || sub.status === "Under Review") && (
+                                <Select onValueChange={async (editorId) => {
+                                  const editorName = editors.find((e) => String(e.id) === String(editorId))?.name || "selected editor";
                                 const confirmed = window.confirm(
                                   `Assign submission #${sub.id} to ${editorName}?`
                                 );
@@ -515,46 +778,136 @@ const AdminDashboard = () => {
             </div>
           </TabsContent>
 
-          {/* Carousel Tab */}
-          <TabsContent value="carousel">
+          <TabsContent value="direct-publish">
             <div className="bg-card border border-border rounded-lg p-6">
-              <h2 className="font-serif text-xl font-semibold mb-6">Carousel Management</h2>
+              <h2 className="font-serif text-xl font-semibold mb-2">Publish Article Directly</h2>
+              <p className="text-sm text-muted-foreground mb-6">
+                Upload and publish an article immediately without waiting for review workflow.
+              </p>
 
-              <div className="flex gap-4 mb-6">
-                <Input
-                  placeholder="Enter image URL"
-                  value={newCarouselUrl}
-                  onChange={(e) => setNewCarouselUrl(e.target.value)}
-                  className="flex-1"
-                />
-                <Button onClick={handleAddCarouselImage}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add
-                </Button>
-              </div>
+              <form onSubmit={handleDirectPublish} className="space-y-6">
+                <div className="space-y-2">
+                  <Label>Article Title</Label>
+                  <Input
+                    value={publishForm.title}
+                    onChange={(e) => handlePublishFormChange("title", e.target.value)}
+                    placeholder="Enter article title"
+                  />
+                </div>
 
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {settings.carouselImages.map((url, index) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={url}
-                      alt={`Carousel ${index + 1}`}
-                      className="w-full h-40 object-cover rounded-lg"
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Author Name</Label>
+                    <Input
+                      value={publishForm.authorName}
+                      onChange={(e) => handlePublishFormChange("authorName", e.target.value)}
+                      placeholder="Author full name"
                     />
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => {
-                        removeCarouselImage(index);
-                        toast({ title: "Image removed" });
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
                   </div>
-                ))}
-              </div>
+                  <div className="space-y-2">
+                    <Label>Author Email</Label>
+                    <Input
+                      type="email"
+                      value={publishForm.authorEmail}
+                      onChange={(e) => handlePublishFormChange("authorEmail", e.target.value)}
+                      placeholder="author@example.com"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Journal Name</Label>
+                    <Select
+                      value={publishForm.journalName}
+                      onValueChange={(value) => handlePublishFormChange("journalName", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select journal name" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {JOURNAL_OPTIONS.map((journal) => (
+                          <SelectItem key={journal.title} value={journal.title}>
+                            {journal.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Article Type</Label>
+                    <Select
+                      value={publishForm.articleType}
+                      onValueChange={(value) => handlePublishFormChange("articleType", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select article type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ARTICLE_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Journal Category</Label>
+                    <Input value={publishForm.journalType} readOnly placeholder="Auto-filled from journal" />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Word Count</Label>
+                  <Input
+                    type="number"
+                    value={publishForm.wordCount}
+                    onChange={(e) => handlePublishFormChange("wordCount", e.target.value)}
+                    placeholder="e.g. 2500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Cover Image</Label>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const nextImage = e.target.files?.[0] || null;
+                        setPublishImage(nextImage);
+                        setPublishImagePreview(nextImage ? URL.createObjectURL(nextImage) : null);
+                      }}
+                    />
+                    {publishImagePreview && (
+                      <img
+                        src={publishImagePreview}
+                        alt="Article preview"
+                        className="h-24 w-24 rounded object-cover border border-border"
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Article File (PDF/DOC/DOCX)</Label>
+                    <Input
+                      type="file"
+                      accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      onChange={(e) => setPublishFile(e.target.files?.[0] || null)}
+                    />
+                    {publishFile && (
+                      <p className="text-sm text-muted-foreground truncate">{publishFile.name}</p>
+                    )}
+                  </div>
+                </div>
+
+                <Button type="submit" disabled={isPublishingArticle}>
+                  {isPublishingArticle ? "Publishing..." : "Publish Now"}
+                </Button>
+              </form>
             </div>
           </TabsContent>
 

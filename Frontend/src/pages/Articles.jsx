@@ -158,7 +158,7 @@ const Articles = () => {
     }
     toast({
       title: "Download Started",
-      description: `Downloading ${article.title}.pdf`,
+      description: `Downloading ${article.title} file`,
     });
   };
 

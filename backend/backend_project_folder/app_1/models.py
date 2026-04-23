@@ -36,6 +36,7 @@ class Article(models.Model):
         ("UNDER_REVIEW", "Under Review"),
         ("COMPLETED", "Completed"),
         ("PUBLISHED", "Published"),
+        ("ARCHIVED", "Archived"),
         ("REJECTED", "Rejected"),
     )
 
@@ -129,6 +130,18 @@ class SiteSettings(models.Model):
 
     def __str__(self):
         return "Site Settings"
+
+
+class SiteVisitorCounter(models.Model):
+    count = models.PositiveBigIntegerField(default=0)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return f"Site visitors: {self.count}"
 
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin

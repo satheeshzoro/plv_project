@@ -22,6 +22,48 @@
   gap: 2rem;
 }
 
+.hero-visitor-pill {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  padding: 0.5rem 0.85rem;
+  background: linear-gradient(120deg, rgba(35, 94, 97, 0.14), rgba(206, 166, 88, 0.2));
+  border: 1px solid rgba(35, 94, 97, 0.26);
+  box-shadow: 0 10px 26px -16px rgba(21, 59, 65, 0.55);
+  color: hsl(var(--heading-color));
+  backdrop-filter: blur(4px);
+}
+
+.hero-visitor-pill-dark {
+  background: linear-gradient(120deg, rgba(122, 168, 170, 0.2), rgba(206, 166, 88, 0.22));
+  border-color: rgba(148, 176, 207, 0.32);
+  color: hsl(var(--foreground));
+}
+
+.hero-visitor-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.hero-visitor-value {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  color: hsl(var(--heading-color));
+}
+
+.hero-visitor-pill-dark .hero-visitor-value {
+  color: hsl(var(--foreground));
+}
+
 .hero-card-dark {
   background: linear-gradient(135deg, rgba(13, 31, 35, 0.98), rgba(18, 45, 50, 0.98));
   box-shadow: 0 20px 50px -24px rgba(0, 0, 0, 0.45);
@@ -307,6 +349,20 @@
   .hero-card {
     padding: 1.4rem;
     border-radius: 1.5rem;
+  }
+
+  .hero-visitor-pill {
+    top: 0.85rem;
+    right: 0.85rem;
+    padding: 0.4rem 0.72rem;
+  }
+
+  .hero-visitor-label {
+    font-size: 0.64rem;
+  }
+
+  .hero-visitor-value {
+    font-size: 0.95rem;
   }
 
   .hero-title {

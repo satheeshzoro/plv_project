@@ -122,6 +122,49 @@ class ArticleCreateSerializer(serializers.ModelSerializer):
         # unless it's missing
         return super().create(validated_data)
 
+class AdminPublishedArticleCreateSerializer(serializers.ModelSerializer):
+    JOURNAL_CATEGORY_MAP = ArticleCreateSerializer.JOURNAL_CATEGORY_MAP
+
+    journal_name = serializers.ChoiceField(choices=Article.JOURNAL_NAME_CHOICES)
+    category = serializers.ChoiceField(choices=Article.CATEGORY_CHOICES)
+    article_type = serializers.ChoiceField(choices=Article.ARTICLE_TYPE_CHOICES)
+
+    class Meta:
+        model = Article
+        fields = [
+            "title",
+            "author_name",
+            "author_email",
+            "category",
+            "journal_name",
+            "article_type",
+            "file",
+            "image",
+            "word_count",
+        ]
+
+    def validate(self, attrs):
+        journal_name = attrs.get("journal_name")
+        category = attrs.get("category")
+        expected_category = self.JOURNAL_CATEGORY_MAP.get(journal_name)
+
+        if expected_category and category != expected_category:
+            raise serializers.ValidationError(
+                {
+                    "category": (
+                        f'"{journal_name}" must be submitted under "{expected_category}".'
+                    )
+                }
+            )
+
+        return attrs
+
+    def create(self, validated_data):
+        word_count = validated_data.get("word_count", 0)
+        if word_count:
+            validated_data["read_time"] = max(1, round(int(word_count) / 200))
+        return super().create(validated_data)
+
 
 class ArticleListSerializer(serializers.ModelSerializer):
 
