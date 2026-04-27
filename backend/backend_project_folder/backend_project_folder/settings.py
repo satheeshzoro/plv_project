@@ -26,7 +26,17 @@ SECRET_KEY = 'django-insecure-ycntwyyvw+-v2_fn$0+il4u=_@ix9%pj%-51mf5!*k%=#k)ax$
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "192.168.1.25"]
+DEFAULT_ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    "192.168.1.17",
+    "192.168.1.25",
+]
+ALLOWED_HOSTS_ENV = os.getenv("DJANGO_ALLOWED_HOSTS", "")
+if ALLOWED_HOSTS_ENV.strip():
+    ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_ENV.split(",") if host.strip()]
+else:
+    ALLOWED_HOSTS = DEFAULT_ALLOWED_HOSTS
 
 
 # Application definition
@@ -59,19 +69,33 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-CORS_ALLOWED_ORIGINS = [
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
+DEFAULT_FRONTEND_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://192.168.1.17:3000",
+    "http://192.168.1.17:5173",
+    "http://localhost",
+    "http://127.0.0.1",
+    "http://192.168.1.17",
+    "http://192.168.1.25:3000",
+    "http://192.168.1.25:5173",
+    "http://192.168.1.25",
+    "https://localhost",
+    "https://127.0.0.1",
+    "https://192.168.1.17",
+    "https://192.168.1.25",
 ]
 
-CSRF_TRUSTED_ORIGINS = [
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-]
+FRONTEND_ORIGINS = os.getenv("FRONTEND_ORIGINS", "")
+if FRONTEND_ORIGINS.strip():
+    parsed_frontend_origins = [origin.strip() for origin in FRONTEND_ORIGINS.split(",") if origin.strip()]
+else:
+    parsed_frontend_origins = DEFAULT_FRONTEND_ORIGINS
+
+CORS_ALLOWED_ORIGINS = parsed_frontend_origins
+CSRF_TRUSTED_ORIGINS = parsed_frontend_origins
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -98,6 +122,9 @@ CSRF_COOKIE_SAMESITE = "Lax" # Change from Strict to Lax for cross-origin local 
 SESSION_COOKIE_SECURE = False
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", "14400"))  # 4 hours
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_SAVE_EVERY_REQUEST = True
 
 # Ensure CORS headers are sent even on error responses
 CORS_ALLOW_ALL_ORIGINS = False 

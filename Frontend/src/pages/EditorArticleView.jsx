@@ -7,6 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAppData } from "@/context/AppDataContext";
 import { useToast } from "@/hooks/use-toast";
 import Navbar from "@/components/Navbar";
+import { resolveBackendUrl } from "@/lib/api";
+
+const BACKEND_URL = resolveBackendUrl();
 
 const EditorArticleView = () => {
   const { id } = useParams();
@@ -24,7 +27,7 @@ const EditorArticleView = () => {
     // If it starts with /articles, it might be missing /media prefix if backend isn't configured right
     // But standard Django setup with serializer context returns full URL.
     // If we are getting relative paths, we might need to prepend backend URL.
-    const backend = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+    const backend = BACKEND_URL;
     // Check if it already has /media
     if (url.startsWith("/media")) return `${backend}${url}`;
     
@@ -65,7 +68,7 @@ const EditorArticleView = () => {
         editor_report: editorReport.trim(),
       });
       toast({
-        title: status === "COMPLETED" ? "Article Accepted" : "Article Rejected",
+        title: status === "EDITOR_COMPLETED" ? "Editor Review Completed" : "Article Rejected",
         description: `The submission has been marked as ${status.toLowerCase()}.`,
       });
       navigate("/editor/dashboard");
@@ -151,9 +154,9 @@ const EditorArticleView = () => {
 
             {/* Actions Bar */}
             <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-border">
-              <Button className="flex-1" size="lg" onClick={() => handleStatusUpdate("COMPLETED")}>
+              <Button className="flex-1" size="lg" onClick={() => handleStatusUpdate("EDITOR_COMPLETED")}>
                 <CheckCircle className="w-5 h-5 mr-2" />
-                Accept Article
+                Complete Editor Review
               </Button>
               <Button variant="destructive" className="flex-1" size="lg" onClick={() => handleStatusUpdate("REJECTED")}>
                 <XCircle className="w-5 h-5 mr-2" />

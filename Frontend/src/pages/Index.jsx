@@ -16,9 +16,11 @@ const Index = () => {
   const {
     currentUser,
     currentEditor,
+    currentReviewer,
     isAdminLoggedIn,
     logoutUser,
     logoutEditor,
+    logoutReviewer,
     logoutAdmin,
   } = useAppData();
   const [authModal, setAuthModal] = useState({ isOpen: false, mode: "signin" });
@@ -39,13 +41,20 @@ const Index = () => {
   };
 
   const handleAuthSuccess = (user) => {
-    if (user.role === "ADMIN") {
+    const normalizedRole = user?.role?.toUpperCase();
+
+    if (normalizedRole === "ADMIN") {
       navigate("/admin/dashboard", { replace: true });
       return;
     }
 
-    if (user.role === "EDITOR") {
+    if (normalizedRole === "EDITOR") {
       navigate("/editor/dashboard", { replace: true });
+      return;
+    }
+
+    if (normalizedRole === "REVIEWER") {
+      navigate("/reviewer/dashboard", { replace: true });
       return;
     }
 
@@ -58,6 +67,10 @@ const Index = () => {
 
   if (currentEditor) {
     return <Navigate to="/editor/dashboard" replace />;
+  }
+
+  if (currentReviewer) {
+    return <Navigate to="/reviewer/dashboard" replace />;
   }
 
   return (
@@ -75,6 +88,11 @@ const Index = () => {
 
           if (currentEditor) {
             logoutEditor();
+            return;
+          }
+
+          if (currentReviewer) {
+            logoutReviewer();
             return;
           }
 

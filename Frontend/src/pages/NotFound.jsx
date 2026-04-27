@@ -16,7 +16,7 @@ const NotFound = () => {
             <span>
               <span className="block font-serif text-2xl font-semibold text-heading">QuiLive</span>
               <span className="block text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
-                Academic Hub
+                Publisher's
               </span>
             </span>
           </div>

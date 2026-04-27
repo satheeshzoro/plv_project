@@ -1,4 +1,4 @@
-import { Clock, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { useAppData } from "@/context/AppDataContext";
 import { resolveBackendUrl } from "@/lib/api";
 
@@ -64,11 +64,7 @@ const ArticleCard = ({ article, index }) => {
         </p>
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-4 border-t border-border/50">
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Clock className="w-4 h-4" />
-            <span>{readTime || "5 min read"}</span>
-          </div>
+        <div className="flex items-center justify-end pt-4 border-t border-border/50">
           <button
             type="button"
             onClick={handleReadMore}

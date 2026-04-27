@@ -34,6 +34,9 @@ class Article(models.Model):
     STATUS_CHOICES = (
         ("PENDING", "Pending"),
         ("UNDER_REVIEW", "Under Review"),
+        ("EDITOR_COMPLETED", "Editor Completed"),
+        ("UNDER_REVIEWER_REVIEW", "Under Reviewer Review"),
+        ("REVIEWER_COMPLETED", "Reviewer Completed"),
         ("COMPLETED", "Completed"),
         ("PUBLISHED", "Published"),
         ("ARCHIVED", "Archived"),
@@ -57,7 +60,7 @@ class Article(models.Model):
     read_time = models.IntegerField(default=0) # in minutes
 
     status = models.CharField(
-        max_length=20,
+        max_length=32,
         choices=STATUS_CHOICES,
         default="PENDING"
     )
@@ -75,7 +78,17 @@ class Article(models.Model):
         blank=True,
         on_delete=models.SET_NULL
     )
+    reviewer_assigned_to = models.ForeignKey(
+        User,
+        related_name="reviewer_assigned_articles",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL
+    )
     editor_report = models.TextField(blank=True, default="")
+    reviewer_report = models.TextField(blank=True, default="")
+    reviewer_form = models.JSONField(default=dict, blank=True)
+    reviewer_submitted_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     published_date = models.DateField(null=True, blank=True)
@@ -154,6 +167,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     ROLE_CHOICES = (
         ("USER", "User"),
         ("EDITOR", "Editor"),
+        ("REVIEWER", "Reviewer"),
         ("ADMIN", "Admin"),
     )
 
@@ -195,7 +209,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         if self.role == "ADMIN":
             self.is_staff = True
             self.is_superuser = True
-        elif self.role == "EDITOR":
+        elif self.role in ["EDITOR", "REVIEWER"]:
             self.is_staff = True
             self.is_superuser = False
         else:
@@ -211,6 +225,10 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     @property
     def is_editor(self):
         return self.role == "EDITOR"
+
+    @property
+    def is_reviewer(self):
+        return self.role == "REVIEWER"
 
     def __str__(self):
         return self.email

@@ -63,6 +63,7 @@ const getAccountPath = (user) => {
   const role = user?.role?.toUpperCase();
   if (role === "ADMIN") return "/admin/dashboard";
   if (role === "EDITOR") return "/editor/dashboard";
+  if (role === "REVIEWER") return "/reviewer/dashboard";
   return "/user/dashboard";
 };
 
@@ -70,6 +71,7 @@ const getAccountLabel = (user) => {
   const role = user?.role?.toUpperCase();
   if (role === "ADMIN") return "Admin Dashboard";
   if (role === "EDITOR") return "Editor Dashboard";
+  if (role === "REVIEWER") return "Reviewer Dashboard";
   return "Submission History";
 };
 
@@ -92,7 +94,7 @@ const Navbar = ({ isLoggedIn, user, onSignIn, onSignUp, onSignOut, submitPath = 
   const location = useLocation();
   const { profileSummary, fetchProfileSummary, updateProfileSummary, uploadEditorProfileImage } = useAppData();
   const normalizedRole = user?.role?.toUpperCase();
-  const isEditorRole = normalizedRole === "EDITOR";
+  const isEditorRole = normalizedRole === "EDITOR" || normalizedRole === "REVIEWER";
   const accountPath = getAccountPath(user);
   const accountLabel = getAccountLabel(user);
   const activeLinkClass = "text-[13px] font-semibold text-primary";
@@ -176,7 +178,7 @@ const Navbar = ({ isLoggedIn, user, onSignIn, onSignUp, onSignOut, submitPath = 
               QuiLive
             </span>
             <span className="mt-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-              Academic Hub
+              Publishers
             </span>
           </span>
         </a>

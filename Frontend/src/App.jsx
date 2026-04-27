@@ -15,6 +15,7 @@ import UserDashboard from "./pages/UserDashboard";
 import CommonLogin from "./pages/CommonLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import EditorDashboard from "./pages/EditorDashboard";
+import ReviewerDashboard from "./pages/ReviewerDashboard";
 import EditorArticleView from "./pages/EditorArticleView";
 import UsersDirectory from "./pages/UsersDirectory";
 import NotFound from "./pages/NotFound";
@@ -28,7 +29,7 @@ const App = () => (
         <ThemeProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <ScrollToTop />
             <Routes>
               <Route path="/" element={<Index />} />
@@ -50,7 +51,9 @@ const App = () => (
               <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/editor" element={<Navigate to="/editor/login" replace />} />
+              <Route path="/reviewer" element={<Navigate to="/editor/login" replace />} />
               <Route path="/editor/dashboard" element={<EditorDashboard />} />
+              <Route path="/reviewer/dashboard" element={<ReviewerDashboard />} />
               <Route path="/editor/submission/:id" element={<EditorArticleView />} />
               <Route path="/users" element={<UsersDirectory />} />
               <Route path="*" element={<NotFound />} />

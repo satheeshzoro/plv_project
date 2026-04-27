@@ -34,19 +34,46 @@ export const normalizeText = (value) => value.trim();
 
 export const resolveBackendUrl = () => {
   const configuredUrl = (import.meta.env.VITE_BACKEND_URL || "").trim();
-  const fallbackUrl = `${window.location.protocol}//${window.location.hostname}:8000`;
+  const { protocol, hostname } = window.location;
+
+  // In dev, prefer same-origin requests and let Vite proxy /api and /media.
+  // This avoids host/cookie mismatches (localhost vs 127.0.0.1 vs LAN IP).
+  if (import.meta.env.DEV) {
+    return "";
+  }
 
   if (!configuredUrl) {
-    return fallbackUrl;
+    return "";
   }
 
   try {
     const backend = new URL(configuredUrl);
-    const frontendHost = window.location.hostname;
+    const frontendHost = hostname;
     const loopbackHosts = new Set(["localhost", "127.0.0.1"]);
+    const isFrontendLoopback = loopbackHosts.has(frontendHost);
 
-    if (loopbackHosts.has(backend.hostname) && loopbackHosts.has(frontendHost)) {
+    // Keep localhost and 127.0.0.1 aligned to avoid session-cookie mismatch
+    // when frontend is opened on one loopback host and backend is configured on the other.
+    // Do not retarget to LAN hosts here (that can cause connection-refused when backend
+    // is only bound to loopback).
+    if (
+      loopbackHosts.has(backend.hostname) &&
+      loopbackHosts.has(frontendHost) &&
+      frontendHost
+    ) {
       backend.hostname = frontendHost;
+    }
+
+    // If backend is configured as loopback but frontend is opened from LAN/prod host,
+    // prefer same-origin API routing (for example via reverse proxy) instead of an
+    // unreachable loopback URL.
+    if (loopbackHosts.has(backend.hostname) && !isFrontendLoopback) {
+      return "";
+    }
+
+    // Prevent mixed-content failures when frontend is served over HTTPS.
+    if (protocol === "https:" && backend.protocol === "http:") {
+      backend.protocol = "https:";
     }
 
     return backend.origin;

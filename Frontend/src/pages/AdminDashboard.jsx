@@ -11,6 +11,7 @@ import {
   Archive,
   Undo2,
   UserPlus,
+  UserCheck,
   Upload,
   LineChart as LineChartIcon,
   Newspaper,
@@ -47,6 +48,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
 import { resolveBackendUrl } from "@/lib/api";
+import ReviewerReportModal from "@/components/ReviewerReportModal";
 import { ARTICLE_TYPES, JOURNAL_CATEGORY_BY_TITLE, JOURNAL_OPTIONS } from "@/data/journalOptions";
 import logoImage from "../../assets/logo.png";
 import mainImage from "../../assets/main.png";
@@ -95,13 +97,16 @@ const AdminDashboard = () => {
     adminUser,
     isAuthChecking,
     editors,
+    reviewers,
     users,
-    promoteUserToEditor,
+    changeUserRole,
     updateEditorJournalCategory,
     journals,
     archivedJournals,
     submissions,
     assignSubmission,
+    assignReviewer,
+    fetchReviewerReport,
     publishSubmission,
     adminPublishArticle,
     archiveJournal,
@@ -132,6 +137,13 @@ const AdminDashboard = () => {
   const [analyticsFilters, setAnalyticsFilters] = useState({
     year: String(new Date().getFullYear()),
     month: "all",
+  });
+  const [reviewerReportModal, setReviewerReportModal] = useState({
+    open: false,
+    loading: false,
+    error: "",
+    report: null,
+    title: "Reviewer Report",
   });
 
   useEffect(() => {
@@ -248,6 +260,31 @@ const AdminDashboard = () => {
     return `${BACKEND_URL}${fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`}`;
   };
 
+  const openReviewerReportModal = async (articleId) => {
+    setReviewerReportModal({
+      open: true,
+      loading: true,
+      error: "",
+      report: null,
+      title: `Reviewer Report - Submission #${articleId}`,
+    });
+
+    try {
+      const report = await fetchReviewerReport(articleId);
+      setReviewerReportModal((prev) => ({
+        ...prev,
+        loading: false,
+        report,
+      }));
+    } catch (error) {
+      setReviewerReportModal((prev) => ({
+        ...prev,
+        loading: false,
+        error: error.message || "Unable to fetch reviewer report.",
+      }));
+    }
+  };
+
   return (
     <div className="dashboard-shell">
       {/* Header */}
@@ -294,6 +331,10 @@ const AdminDashboard = () => {
               <Users className="w-4 h-4 mr-2" />
               Editors
             </TabsTrigger>
+            <TabsTrigger value="reviewers" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <UserCheck className="w-4 h-4 mr-2" />
+              Reviewers
+            </TabsTrigger>
             <TabsTrigger value="users" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <UserPlus className="w-4 h-4 mr-2" />
               Users
@@ -334,6 +375,7 @@ const AdminDashboard = () => {
               <StatCard title="Total Journals" value={stats.totalJournals} icon={BookOpen} />
               <StatCard title="Registered Users" value={stats.registeredUsers} icon={Users} />
               <StatCard title="Active Editors" value={stats.activeEditors} icon={UserPlus} />
+              <StatCard title="Active Reviewers" value={stats.activeReviewers} icon={UserCheck} />
               <StatCard title="Pending Reviews" value={stats.pendingReviews} icon={FileText} />
             </div>
           </TabsContent>
@@ -356,6 +398,7 @@ const AdminDashboard = () => {
                     <TableHead>Pen Name</TableHead>
                     <TableHead>Country</TableHead>
                     <TableHead>Mapped Category</TableHead>
+                    <TableHead>Role</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -397,8 +440,100 @@ const AdminDashboard = () => {
                           </SelectContent>
                         </Select>
                       </TableCell>
+                      <TableCell>
+                        <Select
+                          value={editor.role || "EDITOR"}
+                          onValueChange={async (value) => {
+                            try {
+                              await changeUserRole(editor.id, value);
+                              toast({ title: "Role updated" });
+                            } catch (error) {
+                              toast({
+                                title: "Role update failed",
+                                description: error.message,
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-44">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="EDITOR">EDITOR</SelectItem>
+                            <SelectItem value="REVIEWER">REVIEWER</SelectItem>
+                            <SelectItem value="USER">USER</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
                     </TableRow>
                   ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="reviewers">
+            <div className="bg-card border border-border rounded-lg p-6">
+              <div className="mb-6">
+                <h2 className="font-serif text-xl font-semibold">Active Reviewers</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Reviewers log in from /editor/login and are redirected to reviewer dashboard automatically.
+                </p>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Pen Name</TableHead>
+                    <TableHead>Country</TableHead>
+                    <TableHead>Role</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reviewers.map((reviewer) => (
+                    <TableRow key={reviewer.id}>
+                      <TableCell className="font-medium">{reviewer.name}</TableCell>
+                      <TableCell>{reviewer.email}</TableCell>
+                      <TableCell>{reviewer.penName || "-"}</TableCell>
+                      <TableCell>{reviewer.country || "-"}</TableCell>
+                      <TableCell>
+                        <Select
+                          value={reviewer.role || "REVIEWER"}
+                          onValueChange={async (value) => {
+                            try {
+                              await changeUserRole(reviewer.id, value);
+                              toast({ title: "Role updated" });
+                            } catch (error) {
+                              toast({
+                                title: "Role update failed",
+                                description: error.message,
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-44">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="REVIEWER">REVIEWER</SelectItem>
+                            <SelectItem value="EDITOR">EDITOR</SelectItem>
+                            <SelectItem value="USER">USER</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {reviewers.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        No reviewers found.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -409,7 +544,7 @@ const AdminDashboard = () => {
               <div className="mb-6">
                 <h2 className="font-serif text-xl font-semibold">Registered Users</h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  New registrations stay as `USER` by default. Only admin can grant editor access.
+                  New registrations stay as `USER` by default. Admin can move users across roles.
                 </p>
               </div>
 
@@ -419,7 +554,7 @@ const AdminDashboard = () => {
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>Change Role</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -429,23 +564,30 @@ const AdminDashboard = () => {
                       <TableCell>{user.email}</TableCell>
                       <TableCell>{user.role}</TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          onClick={async () => {
+                        <Select
+                          value={user.role}
+                          onValueChange={async (value) => {
                             try {
-                              await promoteUserToEditor(user.id);
-                              toast({ title: "Editor access granted" });
+                              await changeUserRole(user.id, value);
+                              toast({ title: "Role updated" });
                             } catch (error) {
                               toast({
-                                title: "Failed to grant editor access",
+                                title: "Role update failed",
                                 description: error.message,
                                 variant: "destructive",
                               });
                             }
                           }}
                         >
-                          Grant Editor Access
-                        </Button>
+                          <SelectTrigger className="w-44">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="USER">USER</SelectItem>
+                            <SelectItem value="EDITOR">EDITOR</SelectItem>
+                            <SelectItem value="REVIEWER">REVIEWER</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -649,7 +791,9 @@ const AdminDashboard = () => {
                       <TableHead>Submitted</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Assigned To</TableHead>
+                      <TableHead>Reviewer</TableHead>
                       <TableHead>Editor Report</TableHead>
+                      <TableHead>Reviewer Report</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -665,6 +809,9 @@ const AdminDashboard = () => {
                           <span className={`px-2 py-1 text-xs rounded-full ${
                             sub.status === "Pending" ? "bg-yellow-100 text-yellow-800" :
                             sub.status === "Under Review" ? "bg-blue-100 text-blue-800" :
+                            sub.status === "Editor Completed" ? "bg-indigo-100 text-indigo-800" :
+                            sub.status === "Under Reviewer Review" ? "bg-purple-100 text-purple-800" :
+                            sub.status === "Reviewer Completed" ? "bg-cyan-100 text-cyan-800" :
                             sub.status === "Completed" ? "bg-green-100 text-green-800" :
                             sub.status === "Published" ? "bg-emerald-100 text-emerald-800" :
                             "bg-gray-100 text-gray-800"
@@ -675,8 +822,14 @@ const AdminDashboard = () => {
                         <TableCell>
                           {sub.assignedTo ? editors.find(e => e.id === sub.assignedTo)?.name || "-" : "-"}
                         </TableCell>
+                        <TableCell>
+                          {sub.reviewerAssignedTo ? reviewers.find((r) => r.id === sub.reviewerAssignedTo)?.name || "-" : "-"}
+                        </TableCell>
                         <TableCell className="max-w-xs whitespace-pre-wrap text-sm text-muted-foreground">
                           {sub.editorReport || "-"}
+                        </TableCell>
+                        <TableCell className="max-w-xs whitespace-pre-wrap text-sm text-muted-foreground">
+                          {sub.reviewerReport || "-"}
                         </TableCell>
                           <TableCell>
                             <div className="flex gap-2">
@@ -732,6 +885,42 @@ const AdminDashboard = () => {
                                   ))}
                                 </SelectContent>
                               </Select>
+                            )}
+                            {sub.status === "Editor Completed" && (
+                              <Select
+                                onValueChange={async (reviewerId) => {
+                                  try {
+                                    await assignReviewer(sub.id, reviewerId);
+                                    toast({ title: "Reviewer assigned!" });
+                                  } catch (error) {
+                                    toast({
+                                      title: "Reviewer assignment failed",
+                                      description: error.message,
+                                      variant: "destructive",
+                                    });
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="w-40">
+                                  <SelectValue placeholder="Assign reviewer" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {reviewers.map((reviewer) => (
+                                    <SelectItem key={reviewer.id} value={String(reviewer.id)}>
+                                      {reviewer.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            {sub.status === "Reviewer Completed" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openReviewerReportModal(sub.id)}
+                              >
+                                View Reviewer Report
+                              </Button>
                             )}
                             {sub.assignedTo && (
                               <Button
@@ -1195,6 +1384,17 @@ const AdminDashboard = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <ReviewerReportModal
+        open={reviewerReportModal.open}
+        onOpenChange={(open) =>
+          setReviewerReportModal((prev) => ({ ...prev, open }))
+        }
+        loading={reviewerReportModal.loading}
+        error={reviewerReportModal.error}
+        report={reviewerReportModal.report}
+        title={reviewerReportModal.title}
+      />
     </div>
   );
 };

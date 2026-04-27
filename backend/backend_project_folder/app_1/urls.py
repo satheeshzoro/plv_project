@@ -29,7 +29,11 @@ from .views import (
     IncrementArticleDownloadAPIView,
     TrendingArticlesAPIView,
     AssignEditorAPIView,
+    AssignReviewerAPIView,
+    ReviewerSubmissionReviewAPIView,
     UpdateSubmissionStatusAPIView,
+    ReviewerTasksAPIView,
+    PublishedReviewerReportAPIView,
     RecentPublishedAPIView,
     DashboardAnalyticsAPIView,
     AdminArchivedJournalsAPIView,
@@ -39,11 +43,13 @@ from .views import (
 
 from .views import (
     EditorListCreateAPIView,
+    ReviewerListCreateAPIView,
     EditorTasksAPIView,
     UpdateEditorCategoryAPIView,
     EditorProfileImageAPIView,
     UserListAPIView,
     PromoteUserToEditorAPIView,
+    UserRoleUpdateAPIView,
     ProfileSummaryAPIView,
     UserDirectoryAPIView,
 )
@@ -106,6 +112,16 @@ urlpatterns = [
         AssignEditorAPIView.as_view(),
         name="assign-editor",
     ),
+    path(
+        "submissions/<int:pk>/assign-reviewer/",
+        AssignReviewerAPIView.as_view(),
+        name="assign-reviewer",
+    ),
+    path(
+        "submissions/<int:pk>/reviewer-report/",
+        ReviewerSubmissionReviewAPIView.as_view(),
+        name="submission-reviewer-report",
+    ),
 
     # Editor/Admin updates status
     path(
@@ -117,15 +133,19 @@ urlpatterns = [
     # ===================== EDITORS =====================
     # Admin: list + create editors
     path("editors/", EditorListCreateAPIView.as_view(), name="editors"),
+    path("reviewers/", ReviewerListCreateAPIView.as_view(), name="reviewers"),
     path("editors/<int:pk>/category/", UpdateEditorCategoryAPIView.as_view(), name="editor-category"),
     path("editors/me/profile-image/", EditorProfileImageAPIView.as_view(), name="editor-profile-image"),
 
     # Editor dashboard tasks
     path("editor/tasks/", EditorTasksAPIView.as_view(), name="editor-tasks"),
+    path("reviewer/tasks/", ReviewerTasksAPIView.as_view(), name="reviewer-tasks"),
 
     # ===================== USERS =====================
     path("users/", UserListAPIView.as_view(), name="user-list"),
     path("users/<int:pk>/promote-editor/", PromoteUserToEditorAPIView.as_view(), name="promote-user-to-editor"),
+    path("users/<int:pk>/role/", UserRoleUpdateAPIView.as_view(), name="user-role-update"),
+    path("journals/<int:pk>/reviewer-report/", PublishedReviewerReportAPIView.as_view(), name="journal-reviewer-report"),
 
     # ===================== SITE SETTINGS =====================
     path("settings/", SiteSettingsAPIView.as_view(), name="site-settings"),

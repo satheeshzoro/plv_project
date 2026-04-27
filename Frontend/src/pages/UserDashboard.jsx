@@ -1,4 +1,5 @@
 import { Link, Navigate, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { ArrowLeft, FileText, Clock, CheckCircle, AlertCircle, Newspaper } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -9,7 +10,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import { useAppData } from "@/context/AppDataContext";
+import ReviewerReportModal from "@/components/ReviewerReportModal";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import mainImage from "../../assets/main.png";
@@ -36,7 +39,14 @@ const StatusBadge = ({ status }) => {
 
 const UserDashboard = () => {
   const navigate = useNavigate();
-  const { submissions, currentUser, logoutUser, isAuthChecking, recentPublished } = useAppData();
+  const { submissions, currentUser, logoutUser, isAuthChecking, recentPublished, fetchReviewerReport } = useAppData();
+  const [reviewerReportModal, setReviewerReportModal] = useState({
+    open: false,
+    loading: false,
+    error: "",
+    report: null,
+    title: "Reviewer Report",
+  });
 
   if (isAuthChecking) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -47,6 +57,31 @@ const UserDashboard = () => {
   }
 
   const userSubmissions = submissions.filter((s) => s.email === currentUser?.email);
+
+  const openReviewerReportModal = async (articleId) => {
+    setReviewerReportModal({
+      open: true,
+      loading: true,
+      error: "",
+      report: null,
+      title: `Reviewer Report - Journal #${articleId}`,
+    });
+
+    try {
+      const report = await fetchReviewerReport(articleId);
+      setReviewerReportModal((prev) => ({
+        ...prev,
+        loading: false,
+        report,
+      }));
+    } catch (error) {
+      setReviewerReportModal((prev) => ({
+        ...prev,
+        loading: false,
+        error: error.message || "Report unavailable.",
+      }));
+    }
+  };
 
   return (
     <div className="app-shell min-h-screen bg-background">
@@ -153,6 +188,7 @@ const UserDashboard = () => {
                         <TableHead>Article</TableHead>
                         <TableHead>Journal</TableHead>
                         <TableHead>Published On</TableHead>
+                        <TableHead>Reviewer Report</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -162,10 +198,19 @@ const UserDashboard = () => {
                           <TableCell className="max-w-xs truncate">{item.article_title}</TableCell>
                           <TableCell>{item.journal_name}</TableCell>
                           <TableCell>{item.published_date || "-"}</TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openReviewerReportModal(item.article_id)}
+                            >
+                              View Reviewer Report
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       )) : (
                         <TableRow>
-                          <TableCell colSpan={4} className="text-center text-muted-foreground">
+                          <TableCell colSpan={5} className="text-center text-muted-foreground">
                             No recent published articles yet.
                           </TableCell>
                         </TableRow>
@@ -178,6 +223,17 @@ const UserDashboard = () => {
           </Tabs>
         </div>
       </main>
+
+      <ReviewerReportModal
+        open={reviewerReportModal.open}
+        onOpenChange={(open) =>
+          setReviewerReportModal((prev) => ({ ...prev, open }))
+        }
+        loading={reviewerReportModal.loading}
+        error={reviewerReportModal.error}
+        report={reviewerReportModal.report}
+        title={reviewerReportModal.title}
+      />
 
       <Footer />
     </div>

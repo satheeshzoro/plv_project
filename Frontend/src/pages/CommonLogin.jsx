@@ -12,23 +12,11 @@ import mainImage from "../../assets/main.png";
 
 const BACKEND_URL = resolveBackendUrl();
 
-const COMMON_CREDENTIALS = [
-  {
-    role: "Admin",
-    email: "admin@quilivepublishers.com",
-    password: "Admin@12345",
-  },
-  {
-    role: "Editor",
-    email: "editor@quilivepublishers.com",
-    password: "Editor@12345",
-  },
-];
-
 const getRedirectPath = (role) => {
   const normalizedRole = role?.toUpperCase();
   if (normalizedRole === "ADMIN") return "/admin/dashboard";
   if (normalizedRole === "EDITOR") return "/editor/dashboard";
+  if (normalizedRole === "REVIEWER") return "/reviewer/dashboard";
   return "/user/dashboard";
 };
 
@@ -41,6 +29,7 @@ const CommonLogin = () => {
     isAuthChecking, 
     isAdminLoggedIn, 
     currentEditor, 
+    currentReviewer,
     currentUser,
     loginAdmin,
     loginEditor,
@@ -50,6 +39,10 @@ const CommonLogin = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const isAdminLoginRoute = location.pathname === "/admin/login";
+  const isEditorLoginRoute = location.pathname === "/editor/login";
+
+  const portal = isAdminLoginRoute ? "ADMIN" : isEditorLoginRoute ? "EDITOR" : "GENERAL";
 
   if (isAuthChecking) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -61,6 +54,10 @@ const CommonLogin = () => {
 
   if (currentEditor) {
     return <Navigate to="/editor/dashboard" replace />;
+  }
+
+  if (currentReviewer) {
+    return <Navigate to="/reviewer/dashboard" replace />;
   }
 
   if (currentUser) {
@@ -96,7 +93,7 @@ const CommonLogin = () => {
           "Content-Type": "application/json",
           "X-CSRFToken": csrfToken || "",
         },
-        body: JSON.stringify({ email: normalizedEmail, password }),
+        body: JSON.stringify({ email: normalizedEmail, password, portal }),
         credentials: "include",
       });
 
@@ -121,35 +118,60 @@ const CommonLogin = () => {
         console.error("Failed to refresh CSRF token after login", refreshError);
       }
 
+      const sessionProbe = await fetch(`${BACKEND_URL}/api/user/me/`, {
+        method: "GET",
+        credentials: "include",
+      });
+
+      if (!sessionProbe.ok) {
+        throw new Error(
+          "Your login session is not active on this host. Please sign in again and ensure frontend/backend use the same host (localhost with localhost, 127.0.0.1 with 127.0.0.1, or the same 192.168.x.x host)."
+        );
+      }
+
+      const verifiedSession = await sessionProbe.json();
+
       // Update global state immediately using the login response
       // This prevents the "bounce" if the subsequent checkAuth() fails/delays
-      const normalizedRole = data.role?.toUpperCase();
+      const normalizedRole = verifiedSession.role?.toUpperCase() || data.role?.toUpperCase();
       if (normalizedRole === "ADMIN") {
-        loginAdmin({ name: data.full_name, email: data.email, role: data.role });
-      } else if (normalizedRole === "EDITOR") {
+        loginAdmin({
+          name: verifiedSession.full_name || data.full_name,
+          email: verifiedSession.email || data.email,
+          role: verifiedSession.role || data.role,
+        });
+      } else if (normalizedRole === "EDITOR" || normalizedRole === "REVIEWER") {
         loginEditor({
-          id: data.id,
-          name: data.full_name,
-          email: data.email,
-          role: data.role,
-          profile_image: data.profile_image || null,
-          requires_profile_image: Boolean(data.requires_profile_image),
-          mapped_journal_category: data.mapped_journal_category || "",
+          id: verifiedSession.id || data.id,
+          name: verifiedSession.full_name || data.full_name,
+          email: verifiedSession.email || data.email,
+          role: verifiedSession.role || data.role,
+          profile_image: verifiedSession.profile_image || data.profile_image || null,
+          requires_profile_image: Boolean(
+            verifiedSession.requires_profile_image ?? data.requires_profile_image
+          ),
+          mapped_journal_category:
+            verifiedSession.mapped_journal_category || data.mapped_journal_category || "",
         });
       } else {
-        loginUser({ id: data.id, username: data.full_name, email: data.email, role: data.role });
+        loginUser({
+          id: verifiedSession.id || data.id,
+          username: verifiedSession.full_name || data.full_name,
+          email: verifiedSession.email || data.email,
+          role: verifiedSession.role || data.role,
+        });
       }
 
       toast({
-        title: `Welcome, ${data.full_name || data.email}!`,
-        description: `${normalizedRole === "ADMIN" ? "Admin" : normalizedRole === "EDITOR" ? "Editor" : "User"} access granted.`,
+        title: `Welcome, ${verifiedSession.full_name || data.full_name || verifiedSession.email || data.email}!`,
+        description: `${normalizedRole === "ADMIN" ? "Admin" : normalizedRole === "EDITOR" ? "Editor" : normalizedRole === "REVIEWER" ? "Reviewer" : "User"} access granted.`,
       });
 
       const fromPath = location.state?.from?.pathname;
       const nextPath =
         fromPath && fromPath !== "/login" && fromPath !== "/"
           ? fromPath
-          : getRedirectPath(data.role);
+          : getRedirectPath(verifiedSession.role || data.role);
 
       navigate(nextPath, { replace: true });
     } catch (error) {
@@ -178,7 +200,7 @@ const CommonLogin = () => {
                 <span>
                   <span className="block font-serif text-2xl font-semibold">QuiLive</span>
                   <span className="block text-xs uppercase tracking-[0.28em] text-white/70">
-                    Academic Hub
+                    Publisher's
                   </span>
                 </span>
               </a>
@@ -212,7 +234,7 @@ const CommonLogin = () => {
                 <span>
                   <span className="block font-serif text-2xl font-semibold text-heading">QuiLive</span>
                   <span className="block text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
-                    Academic Hub
+                    Publisher's
                   </span>
                 </span>
               </a>
@@ -220,7 +242,9 @@ const CommonLogin = () => {
                 Account Login
               </h2>
               <p className="mt-2 text-muted-foreground">
-                Use the common sign-in page. Redirects are handled automatically for admin, editor, and user roles.
+                {isAdminLoginRoute
+                  ? "Admin accounts only."
+                  : "Editor and reviewer accounts only."}
               </p>
             </div>
 
@@ -270,14 +294,6 @@ const CommonLogin = () => {
             </Button>
               </form>
 
-              <div className="mt-6 rounded-2xl bg-secondary/55 p-4">
-                <p className="text-sm font-medium text-foreground mb-2">Available seeded accounts</p>
-                {COMMON_CREDENTIALS.map((account) => (
-                  <p key={account.role} className="text-sm text-muted-foreground">
-                    {account.role}: {account.email} / {account.password}
-                  </p>
-                ))}
-              </div>
             </div>
 
             <div className="mt-6 lg:hidden">

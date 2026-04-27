@@ -47,6 +47,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
 import { resolveBackendUrl } from "@/lib/api";
+import ReviewerReportModal from "@/components/ReviewerReportModal";
 import logoImage from "../../assets/logo.png";
 import mainImage from "../../assets/main.png";
 
@@ -79,10 +80,15 @@ const EditorDashboard = () => {
   const { toast } = useToast();
   const {
     currentEditor,
+    currentReviewer,
     isAdminLoggedIn,
     logoutEditor,
     isAuthChecking,
     submissions,
+    reviewers,
+    assignReviewer,
+    fetchReviewerReport,
+    updateSubmissionStatus,
     uploadEditorProfileImage,
     getEditorStats,
     recentPublished,
@@ -110,6 +116,13 @@ const EditorDashboard = () => {
   });
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileImagePreview, setProfileImagePreview] = useState("");
+  const [reviewerReportModal, setReviewerReportModal] = useState({
+    open: false,
+    loading: false,
+    error: "",
+    report: null,
+    title: "Reviewer Report",
+  });
 
   if (isAuthChecking) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -117,6 +130,10 @@ const EditorDashboard = () => {
 
   if (isAdminLoggedIn) {
     return <Navigate to="/admin/dashboard" replace />;
+  }
+
+  if (currentReviewer) {
+    return <Navigate to="/reviewer/dashboard" replace />;
   }
 
   if (!currentEditor) {
@@ -235,6 +252,31 @@ const EditorDashboard = () => {
     }, 10000);
     return () => clearInterval(intervalId);
   }, [fetchSubmissions]);
+
+  const openReviewerReportModal = async (articleId) => {
+    setReviewerReportModal({
+      open: true,
+      loading: true,
+      error: "",
+      report: null,
+      title: `Reviewer Report - Submission #${articleId}`,
+    });
+
+    try {
+      const report = await fetchReviewerReport(articleId);
+      setReviewerReportModal((prev) => ({
+        ...prev,
+        loading: false,
+        report,
+      }));
+    } catch (error) {
+      setReviewerReportModal((prev) => ({
+        ...prev,
+        loading: false,
+        error: error.message || "Unable to fetch reviewer report.",
+      }));
+    }
+  };
 
   return (
     <div className="dashboard-shell">
@@ -408,6 +450,61 @@ const EditorDashboard = () => {
                                   Review
                                 </Button>
                               )}
+                              {task.status === "Editor Completed" && (
+                                <Select
+                                  onValueChange={async (reviewerId) => {
+                                    try {
+                                      await assignReviewer(task.id, reviewerId);
+                                      toast({ title: "Reviewer assigned" });
+                                    } catch (error) {
+                                      toast({
+                                        title: "Failed to assign reviewer",
+                                        description: error.message,
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="w-48">
+                                    <SelectValue placeholder="Assign reviewer" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {reviewers.map((reviewer) => (
+                                      <SelectItem key={reviewer.id} value={String(reviewer.id)}>
+                                        {reviewer.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              {task.status === "Reviewer Completed" && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openReviewerReportModal(task.id)}
+                                  >
+                                    View Reviewer Report
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={async () => {
+                                      try {
+                                        await updateSubmissionStatus(task.id, "COMPLETED");
+                                        toast({ title: "Sent to admin for publishing decision" });
+                                      } catch (error) {
+                                        toast({
+                                          title: "Failed to send to admin",
+                                          description: error.message,
+                                          variant: "destructive",
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    Send To Admin
+                                  </Button>
+                                </>
+                              )}
                               {(task.status === "Completed" || task.status === "Rejected") && !task.fileUrl && (
                                 <span className="text-sm text-muted-foreground">No actions</span>
                               )}
@@ -553,6 +650,17 @@ const EditorDashboard = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <ReviewerReportModal
+        open={reviewerReportModal.open}
+        onOpenChange={(open) =>
+          setReviewerReportModal((prev) => ({ ...prev, open }))
+        }
+        loading={reviewerReportModal.loading}
+        error={reviewerReportModal.error}
+        report={reviewerReportModal.report}
+        title={reviewerReportModal.title}
+      />
 
       <Dialog open={isProfileOpen} onOpenChange={setIsProfileOpen}>
         <DialogContent className="sm:max-w-md">

@@ -53,6 +53,7 @@ const PROCESS_STEPS = [
     icon: CreditCard,
     summary: "Required publication payment is completed and verified.",
     points: [
+      "Publication fee for this stage is 1519 euros.",
       "Payment instructions are shared with the author.",
       "Transaction confirmation is validated.",
       "Article moves to final decision stage.",

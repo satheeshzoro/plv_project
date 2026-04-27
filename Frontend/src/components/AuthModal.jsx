@@ -10,7 +10,7 @@ import mainImage from "../../assets/main.png";
 
 const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
   const { toast } = useToast();
-  const { checkAuth, loginAdmin, loginEditor, loginUser } = useAppData();
+  const { loginAdmin, loginEditor, loginUser } = useAppData();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -88,6 +88,7 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
           body: JSON.stringify({
             email: payload.email,
             password: payload.password,
+            portal: "GENERAL",
           }),
           credentials: "include",
         });
@@ -112,40 +113,59 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
           console.error("Failed to refresh CSRF token after login", e);
         }
 
-        const normalizedRole = data.role?.toUpperCase();
+        const sessionProbe = await fetch(`${backendUrl}/api/user/me/`, {
+          method: "GET",
+          credentials: "include",
+        });
+
+        if (!sessionProbe.ok) {
+          throw new Error(
+            "Your login session is not active on this host. Please sign in again and ensure frontend/backend use the same host (localhost with localhost, 127.0.0.1 with 127.0.0.1, or the same 192.168.x.x host)."
+          );
+        }
+
+        const verifiedSession = await sessionProbe.json();
+
+        const normalizedRole = verifiedSession.role?.toUpperCase() || data.role?.toUpperCase();
         const userData = {
           ...data,
-          username: data.full_name || data.name || data.username || payload.email.split("@")[0],
+          ...verifiedSession,
+          role: verifiedSession.role || normalizedRole || data.role,
+          username:
+            verifiedSession.full_name ||
+            data.full_name ||
+            data.name ||
+            data.username ||
+            payload.email.split("@")[0],
         };
 
         if (normalizedRole === "ADMIN") {
           loginAdmin({
-            name: data.full_name || userData.username,
-            email: data.email,
-            role: data.role,
+            name: verifiedSession.full_name || data.full_name || userData.username,
+            email: verifiedSession.email || data.email,
+            role: verifiedSession.role || data.role,
           });
-        } else if (normalizedRole === "EDITOR") {
+        } else if (normalizedRole === "EDITOR" || normalizedRole === "REVIEWER") {
           loginEditor({
-            id: data.id,
-            name: data.full_name || userData.username,
-            email: data.email,
-            role: data.role,
-            profile_image: data.profile_image || null,
-            requires_profile_image: Boolean(data.requires_profile_image),
-            mapped_journal_category: data.mapped_journal_category || "",
+            id: verifiedSession.id || data.id,
+            name: verifiedSession.full_name || data.full_name || userData.username,
+            email: verifiedSession.email || data.email,
+            role: verifiedSession.role || data.role,
+            profile_image: verifiedSession.profile_image || data.profile_image || null,
+            requires_profile_image: Boolean(
+              verifiedSession.requires_profile_image ?? data.requires_profile_image
+            ),
+            mapped_journal_category:
+              verifiedSession.mapped_journal_category || data.mapped_journal_category || "",
           });
         } else {
           loginUser({
-            id: data.id,
+            id: verifiedSession.id || data.id,
             username: userData.username,
-            email: data.email,
-            role: data.role,
+            email: verifiedSession.email || data.email,
+            role: verifiedSession.role || data.role,
           });
         }
-
-        checkAuth().catch((authError) => {
-          console.error("Post-login auth refresh failed", authError);
-        });
 
         toast({
           title: "Welcome Back!",
@@ -191,7 +211,7 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
               <span>
                 <span className="block font-serif text-2xl font-semibold">QuiLive</span>
                 <span className="block text-[11px] uppercase tracking-[0.28em] text-white/70">
-                  Academic Hub
+                  Publisher's
                 </span>
               </span>
             </div>
@@ -199,7 +219,7 @@ const AuthModal = ({ isOpen, onClose, mode, onSwitchMode, onSuccess }) => {
               {isSignUp ? "Create your author account and start publishing." : "Continue into your role-based workspace."}
             </h3>
             <p className="mt-4 max-w-sm text-sm leading-6 text-white/76">
-              Editors and admins use the same entry point. Access changes automatically after authentication.
+              This sign in is for author accounts. Editor/reviewer/admin accounts should use their dedicated login pages.
             </p>
           </div>
 

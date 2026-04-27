@@ -18,7 +18,7 @@ from rest_framework.authentication import SessionAuthentication
 
 from .models import Article, ArticleView, SiteSettings, SiteVisitorCounter
 from .serializers import *
-from .permissions import IsAdmin, IsEditor, IsUser
+from .permissions import IsAdmin, IsEditor, IsReviewer, IsEditorOrReviewer, IsUser
 
 User = get_user_model()
 
@@ -62,6 +62,8 @@ class LoginAPIView(APIView):
                 user.save()
 
             login(request, user)           # creates session
+            # Keep session alive for configured duration (default: 4 hours).
+            request.session.set_expiry(getattr(settings, "SESSION_COOKIE_AGE", 14400))
             
             return Response(
                 {
@@ -71,7 +73,7 @@ class LoginAPIView(APIView):
                     "role": user.role,
                     "full_name": user.full_name,
                     "profile_image": get_profile_image_url(request, user),
-                    "requires_profile_image": user.role == "EDITOR" and not bool(user.profile_image),
+                    "requires_profile_image": user.role in ["EDITOR", "REVIEWER"] and not bool(user.profile_image),
                     "mapped_journal_category": getattr(user, "mapped_journal_category", None),
                 },
                 status=status.HTTP_200_OK
@@ -112,7 +114,7 @@ class CurrentUserAPIView(APIView):
             "role": user.role,
             "mapped_journal_category": getattr(user, "mapped_journal_category", None),
             "profile_image": get_profile_image_url(request, user),
-            "requires_profile_image": user.role == "EDITOR" and not bool(user.profile_image),
+            "requires_profile_image": user.role in ["EDITOR", "REVIEWER"] and not bool(user.profile_image),
         })
 
 # ==============================================================================
@@ -144,6 +146,10 @@ class AssignEditorAPIView(APIView):
         editor_id = request.data.get("editor_id")
         if editor_id in [None, "", "null"]:
             article.assigned_to = None
+            article.reviewer_assigned_to = None
+            article.reviewer_report = ""
+            article.reviewer_form = {}
+            article.reviewer_submitted_at = None
             if article.status == "UNDER_REVIEW":
                 article.status = "PENDING"
             article.save()
@@ -158,6 +164,10 @@ class AssignEditorAPIView(APIView):
             )
 
         article.assigned_to = editor
+        article.reviewer_assigned_to = None
+        article.reviewer_report = ""
+        article.reviewer_form = {}
+        article.reviewer_submitted_at = None
         article.status = "UNDER_REVIEW"
         article.save()
         return Response({"message": "Editor assigned successfully"})
@@ -168,6 +178,121 @@ class EditorTasksAPIView(APIView):
         articles = Article.objects.filter(assigned_to=request.user)
         serializer = ArticleListSerializer(articles, many=True, context={"request": request})
         return Response(serializer.data)
+
+
+class ReviewerTasksAPIView(APIView):
+    permission_classes = [IsReviewer]
+
+    def get(self, request):
+        articles = Article.objects.filter(reviewer_assigned_to=request.user)
+        serializer = ArticleListSerializer(articles, many=True, context={"request": request})
+        return Response(serializer.data)
+
+
+class AssignReviewerAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        article = get_object_or_404(Article, pk=pk)
+        if request.user.role not in ["EDITOR", "ADMIN"]:
+            return Response({"detail": "Only editor or admin can assign reviewer."}, status=403)
+
+        if request.user.role == "EDITOR" and article.assigned_to != request.user:
+            return Response({"detail": "Only the assigned editor can assign reviewer."}, status=403)
+
+        serializer = ReviewerAssignmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reviewer_id = serializer.validated_data.get("reviewer_id")
+
+        if reviewer_id in [None, "", "null"]:
+            article.reviewer_assigned_to = None
+            article.reviewer_report = ""
+            article.reviewer_form = {}
+            article.reviewer_submitted_at = None
+            if article.status in ["UNDER_REVIEWER_REVIEW", "REVIEWER_COMPLETED"]:
+                article.status = "EDITOR_COMPLETED"
+            article.save()
+            return Response({"message": "Reviewer unassigned successfully"})
+
+        if article.status not in ["EDITOR_COMPLETED", "UNDER_REVIEWER_REVIEW", "REVIEWER_COMPLETED"]:
+            return Response(
+                {"detail": "Only editor-completed submissions can be sent to reviewer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reviewer = get_object_or_404(User, pk=reviewer_id, role="REVIEWER")
+        article.reviewer_assigned_to = reviewer
+        article.status = "UNDER_REVIEWER_REVIEW"
+        article.save(update_fields=["reviewer_assigned_to", "status"])
+        return Response({"message": "Reviewer assigned successfully"})
+
+
+class ReviewerSubmissionReviewAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsReviewer]
+
+    def post(self, request, pk):
+        article = get_object_or_404(Article, pk=pk)
+        if article.reviewer_assigned_to != request.user:
+            return Response({"detail": "This submission is not assigned to you."}, status=403)
+
+        serializer = ReviewerReviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        article.reviewer_form = payload
+        article.reviewer_report = (
+            f"Reviewer: {payload.get('reviewer_name') or request.user.full_name}\n"
+            f"Recommend for publication: {'Yes' if payload.get('recommend_for_publication') else 'No'}\n"
+            f"Decision: {payload.get('reviewer_decision')}\n\n"
+            f"Comments:\n{payload.get('comments_and_feedback')}"
+        )
+        article.reviewer_submitted_at = timezone.now()
+        article.status = "REVIEWER_COMPLETED"
+        article.save(
+            update_fields=[
+                "reviewer_form",
+                "reviewer_report",
+                "reviewer_submitted_at",
+                "status",
+            ]
+        )
+
+        return Response(
+            {
+                "message": "Reviewer report submitted successfully.",
+                "reviewer_form": article.reviewer_form,
+                "reviewer_report": article.reviewer_report,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class PublishedReviewerReportAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        article = get_object_or_404(Article, pk=pk)
+        is_privileged = (
+            request.user.role == "ADMIN"
+            or article.assigned_to_id == request.user.id
+            or article.reviewer_assigned_to_id == request.user.id
+            or article.submitted_by_id == request.user.id
+        )
+
+        if article.status != "PUBLISHED" and not is_privileged:
+            return Response({"detail": "Reviewer report is available after publication."}, status=403)
+
+        return Response(
+            {
+                "article_id": article.id,
+                "article_title": article.title,
+                "status": article.status,
+                "reviewer_report": article.reviewer_report,
+                "reviewer_form": article.reviewer_form,
+                "reviewer_submitted_at": article.reviewer_submitted_at,
+                "editor_report": article.editor_report,
+            }
+        )
 
 class PublishedArticlesAPIView(APIView):
     permission_classes = [AllowAny]
@@ -348,13 +473,26 @@ class UpdateSubmissionStatusAPIView(APIView):
             if article.assigned_to != request.user:
                 return Response({"error": "Not your assigned article"}, status=403)
 
-            if new_status not in ["COMPLETED", "REJECTED"]:
+            if new_status not in ["EDITOR_COMPLETED", "COMPLETED", "REJECTED"]:
                 return Response({"error": "Invalid status for editor"}, status=400)
 
-            if not editor_report:
+            if new_status in ["EDITOR_COMPLETED", "REJECTED"] and not editor_report:
                 return Response({"error": "editor_report is required"}, status=400)
 
-            article.editor_report = editor_report
+            if new_status == "COMPLETED" and article.status != "REVIEWER_COMPLETED":
+                return Response(
+                    {"error": "Reviewer feedback is required before sending to admin"},
+                    status=400,
+                )
+
+            if new_status == "COMPLETED" and not article.reviewer_report:
+                return Response(
+                    {"error": "Reviewer report not found"},
+                    status=400,
+                )
+
+            if editor_report:
+                article.editor_report = editor_report
 
         elif request.user.role == "ADMIN":
             if new_status not in ["PUBLISHED", "REJECTED"]:
@@ -405,7 +543,7 @@ class ProfileSummaryAPIView(APIView):
                 "pen_name": user.pen_name,
                 "country": user.country,
                 "profile_image": get_profile_image_url(request, user),
-                "requires_profile_image": user.role == "EDITOR" and not bool(user.profile_image),
+                "requires_profile_image": user.role in ["EDITOR", "REVIEWER"] and not bool(user.profile_image),
                 "mapped_journal_category": getattr(user, "mapped_journal_category", None),
                 "total_submissions": total_submissions,
                 "published_submissions": published_submissions,
@@ -448,7 +586,7 @@ class ProfileSummaryAPIView(APIView):
                 "pen_name": user.pen_name,
                 "country": user.country,
                 "profile_image": get_profile_image_url(request, user),
-                "requires_profile_image": user.role == "EDITOR" and not bool(user.profile_image),
+                "requires_profile_image": user.role in ["EDITOR", "REVIEWER"] and not bool(user.profile_image),
                 "mapped_journal_category": getattr(user, "mapped_journal_category", None),
                 "total_submissions": submitted_articles.count(),
                 "published_submissions": submitted_articles.filter(status="PUBLISHED").count(),
@@ -457,7 +595,7 @@ class ProfileSummaryAPIView(APIView):
 
 
 class EditorProfileImageAPIView(APIView):
-    permission_classes = [IsAuthenticated, IsEditor]
+    permission_classes = [IsAuthenticated, IsEditorOrReviewer]
 
     def get(self, request):
         return Response(
@@ -545,8 +683,8 @@ class DashboardAnalyticsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if request.user.role not in ["ADMIN", "EDITOR"]:
-            return Response({"detail": "Only admin or editor can access analytics."}, status=403)
+        if request.user.role not in ["ADMIN", "EDITOR", "REVIEWER"]:
+            return Response({"detail": "Only admin, editor, or reviewer can access analytics."}, status=403)
 
         now = timezone.now()
         year_param = request.query_params.get("year")
@@ -572,6 +710,8 @@ class DashboardAnalyticsAPIView(APIView):
         submissions_qs = Article.objects.all()
         if request.user.role == "EDITOR":
             submissions_qs = submissions_qs.filter(assigned_to=request.user)
+        elif request.user.role == "REVIEWER":
+            submissions_qs = submissions_qs.filter(reviewer_assigned_to=request.user)
 
         year_submissions = submissions_qs.filter(created_at__year=year)
         monthly_counts = (
@@ -590,6 +730,8 @@ class DashboardAnalyticsAPIView(APIView):
         visitors_qs = ArticleView.objects.all()
         if request.user.role == "EDITOR":
             visitors_qs = visitors_qs.filter(article__assigned_to=request.user)
+        elif request.user.role == "REVIEWER":
+            visitors_qs = visitors_qs.filter(article__reviewer_assigned_to=request.user)
 
         visitors_qs = visitors_qs.filter(created_at__year=year)
         if month:
@@ -599,6 +741,8 @@ class DashboardAnalyticsAPIView(APIView):
         article_metrics_qs = Article.objects.filter(status="PUBLISHED")
         if request.user.role == "EDITOR":
             article_metrics_qs = article_metrics_qs.filter(assigned_to=request.user)
+        elif request.user.role == "REVIEWER":
+            article_metrics_qs = article_metrics_qs.filter(reviewer_assigned_to=request.user)
 
         article_metrics = [
             {
@@ -647,6 +791,26 @@ class EditorListCreateAPIView(ListCreateAPIView):
         return context
 
 
+class ReviewerListCreateAPIView(ListCreateAPIView):
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [AllowAny()]
+        return [IsAuthenticated(), IsAdmin()]
+
+    def get_queryset(self):
+        return User.objects.filter(role="REVIEWER")
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return ReviewerCreateSerializer
+        return EditorSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
+
+
 class UpdateEditorCategoryAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
@@ -667,18 +831,45 @@ class UserListAPIView(ListAPIView):
     def get_queryset(self):
         return User.objects.filter(role="USER")
 
+class UserRoleUpdateAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def patch(self, request, pk):
+        user = get_object_or_404(User, pk=pk)
+        serializer = UserRoleUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        role = serializer.validated_data["role"]
+
+        user.role = role
+        if "pen_name" in serializer.validated_data:
+            user.pen_name = serializer.validated_data.get("pen_name") or None
+        if "country" in serializer.validated_data:
+            user.country = serializer.validated_data.get("country") or None
+
+        if role == "EDITOR":
+            user.mapped_journal_category = serializer.validated_data.get("mapped_journal_category") or None
+        else:
+            user.mapped_journal_category = None
+
+        user.save()
+
+        return Response(
+            {
+                "message": "User role updated successfully",
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "role": user.role,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class PromoteUserToEditorAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def patch(self, request, pk):
         user = get_object_or_404(User, pk=pk)
-
-        if user.role != "USER":
-            return Response(
-                {"detail": "Only users with USER role can be promoted to editor."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         user.role = "EDITOR"
         user.pen_name = request.data.get("pen_name", user.pen_name)
         user.country = request.data.get("country", user.country)

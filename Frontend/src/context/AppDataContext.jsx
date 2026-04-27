@@ -9,6 +9,9 @@ const mapStatusFromApi = (status) => {
   const statusMap = {
     PENDING: "Pending",
     UNDER_REVIEW: "Under Review",
+    EDITOR_COMPLETED: "Editor Completed",
+    UNDER_REVIEWER_REVIEW: "Under Reviewer Review",
+    REVIEWER_COMPLETED: "Reviewer Completed",
     COMPLETED: "Completed",
     PUBLISHED: "Published",
     ARCHIVED: "Archived",
@@ -33,6 +36,7 @@ const mapArticleToCard = (article) => ({
 
 export const AppDataProvider = ({ children }) => {
   const [editors, setEditors] = useState([]);
+  const [reviewers, setReviewers] = useState([]);
   const [journals, setJournals] = useState([]);
   const [archivedJournals, setArchivedJournals] = useState([]);
   const [trendingArticles, setTrendingArticles] = useState([]);
@@ -54,6 +58,7 @@ export const AppDataProvider = ({ children }) => {
   const [dashboardAnalytics, setDashboardAnalytics] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [currentEditor, setCurrentEditor] = useState(null);
+  const [currentReviewer, setCurrentReviewer] = useState(null);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [adminUser, setAdminUser] = useState(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
@@ -62,6 +67,7 @@ export const AppDataProvider = ({ children }) => {
   const clearAuthState = useCallback(() => {
     setIsAdminLoggedIn(false);
     setCurrentEditor(null);
+    setCurrentReviewer(null);
     setCurrentUser(null);
     setAdminUser(null);
   }, []);
@@ -81,6 +87,7 @@ export const AppDataProvider = ({ children }) => {
       setIsAdminLoggedIn(false);
       setAdminUser(null);
       setCurrentUser(null);
+      setCurrentReviewer(null);
       setCurrentEditor({
         id: data.id,
         name: data.full_name || data.name,
@@ -95,9 +102,29 @@ export const AppDataProvider = ({ children }) => {
       return;
     }
 
+    if (normalizedRole === "REVIEWER") {
+      setIsAdminLoggedIn(false);
+      setAdminUser(null);
+      setCurrentUser(null);
+      setCurrentEditor(null);
+      setCurrentReviewer({
+        id: data.id,
+        name: data.full_name || data.name,
+        email: data.email,
+        role: data.role,
+        profileImage: data.profile_image || null,
+        requiresProfileImage:
+          data.requires_profile_image ??
+          (data.role?.toUpperCase() === "REVIEWER" && !data.profile_image),
+        mappedJournalCategory: data.mapped_journal_category || data.mappedJournalCategory || "",
+      });
+      return;
+    }
+
     setIsAdminLoggedIn(false);
     setAdminUser(null);
     setCurrentEditor(null);
+    setCurrentReviewer(null);
     setCurrentUser({
       id: data.id,
       username: data.full_name || data.username || data.name,
@@ -127,10 +154,22 @@ export const AppDataProvider = ({ children }) => {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
+      const detail = typeof error?.detail === "string" ? error.detail.toLowerCase() : "";
+      const isAuthMissing =
+        detail.includes("authentication credentials were not provided") ||
+        detail.includes("not authenticated") ||
+        detail.includes("session") ||
+        detail.includes("credentials");
+
+      if (response.status === 401 || (response.status === 403 && isAuthMissing)) {
+        clearAuthState();
+        throw new Error("Your session has expired or is not available on this host. Please sign in again.");
+      }
+
       throw new Error(extractApiError(error, "API request failed"));
     }
     return response.json();
-  }, []);
+  }, [clearAuthState]);
 
   // --- Data Fetching ---
   const fetchJournals = useCallback(async () => {
@@ -238,6 +277,25 @@ export const AppDataProvider = ({ children }) => {
     }
   }, [authFetch]);
 
+  const fetchReviewers = useCallback(async () => {
+    try {
+      const data = await authFetch("/api/reviewers/");
+      setReviewers(data.map(e => ({
+        id: e.id,
+        name: e.full_name,
+        email: e.email,
+        role: e.role,
+        penName: e.pen_name,
+        country: e.country,
+        profileImage: e.profile_image || null,
+        requiresProfileImage: Boolean(e.requires_profile_image),
+        mappedJournalCategory: e.mapped_journal_category || "",
+      })));
+    } catch (error) {
+      console.error("Failed to fetch reviewers:", error);
+    }
+  }, [authFetch]);
+
   const fetchRecentPublished = useCallback(async () => {
     try {
       const data = await authFetch("/api/recent-published/?limit=20");
@@ -283,6 +341,16 @@ export const AppDataProvider = ({ children }) => {
           data.requires_profile_image ??
           (data.role?.toUpperCase() === "EDITOR" && !data.profile_image),
       } : prev);
+    } else if (data.role === "REVIEWER") {
+      setCurrentReviewer((prev) => prev ? {
+        ...prev,
+        name: data.full_name,
+        email: data.email,
+        profileImage: data.profile_image || prev.profileImage || null,
+        requiresProfileImage:
+          data.requires_profile_image ??
+          (data.role?.toUpperCase() === "REVIEWER" && !data.profile_image),
+      } : prev);
     } else if (data.role === "ADMIN") {
       setAdminUser((prev) => prev ? {
         ...prev,
@@ -310,6 +378,7 @@ export const AppDataProvider = ({ children }) => {
     let endpoint = "";
     if (isAdminLoggedIn) endpoint = "/api/submissions/all/";
     else if (currentEditor) endpoint = "/api/editor/tasks/";
+    else if (currentReviewer) endpoint = "/api/reviewer/tasks/";
     else if (currentUser) endpoint = "/api/submissions/history/";
     else return;
 
@@ -329,14 +398,18 @@ export const AppDataProvider = ({ children }) => {
         image: s.image,
         status: mapStatusFromApi(s.status),
         assignedTo: s.assigned_to != null ? Number(s.assigned_to) : null,
+        reviewerAssignedTo: s.reviewer_assigned_to != null ? Number(s.reviewer_assigned_to) : null,
         editorReport: s.editor_report || "",
+        reviewerReport: s.reviewer_report || "",
+        reviewerForm: s.reviewer_form || {},
+        reviewerSubmittedAt: s.reviewer_submitted_at || null,
         submittedDate: s.created_at?.split('T')[0] || s.submitted_date,
       }));
       setSubmissions(mappedSubmissions);
     } catch (error) {
       console.error("Failed to fetch submissions:", error);
     }
-  }, [authFetch, isAdminLoggedIn, currentEditor, currentUser]);
+  }, [authFetch, isAdminLoggedIn, currentEditor, currentReviewer, currentUser]);
 
   // --- Auth Check (Session Restoration) ---
   const checkAuth = useCallback(async () => {
@@ -366,13 +439,15 @@ export const AppDataProvider = ({ children }) => {
     fetchTrendingArticles();
     fetchSettings();
     fetchEditors();
+    fetchReviewers();
     checkAuth();
-  }, [fetchJournals, fetchTrendingArticles, fetchSettings, fetchEditors, checkAuth]);
+  }, [fetchJournals, fetchTrendingArticles, fetchSettings, fetchEditors, fetchReviewers, checkAuth]);
 
   // Role-based Data Load
   useEffect(() => {
     if (isAdminLoggedIn) {
       fetchEditors();
+      fetchReviewers();
       fetchUsers();
       fetchUserDirectory();
       fetchArchivedJournals();
@@ -383,12 +458,15 @@ export const AppDataProvider = ({ children }) => {
         console.error("Failed to fetch dashboard analytics:", error);
         setDashboardAnalytics(null);
       });
-    } else if (currentEditor || currentUser) {
+    } else if (currentEditor || currentReviewer || currentUser) {
       fetchSubmissions();
       fetchUserDirectory();
       fetchRecentPublished();
       fetchProfileSummary();
       if (currentEditor) {
+        fetchReviewers();
+      }
+      if (currentEditor || currentReviewer) {
         fetchDashboardAnalytics().catch((error) => {
           console.error("Failed to fetch dashboard analytics:", error);
           setDashboardAnalytics(null);
@@ -401,10 +479,11 @@ export const AppDataProvider = ({ children }) => {
       setUserDirectory([]);
       setRecentPublished([]);
       setArchivedJournals([]);
+      setReviewers([]);
       setProfileSummary(null);
       setDashboardAnalytics(null);
     }
-  }, [isAdminLoggedIn, currentEditor, currentUser, fetchArchivedJournals, fetchDashboardAnalytics, fetchEditors, fetchProfileSummary, fetchRecentPublished, fetchSubmissions, fetchUserDirectory, fetchUsers]);
+  }, [isAdminLoggedIn, currentEditor, currentReviewer, currentUser, fetchArchivedJournals, fetchDashboardAnalytics, fetchEditors, fetchReviewers, fetchProfileSummary, fetchRecentPublished, fetchSubmissions, fetchUserDirectory, fetchUsers]);
 
   // Submission functions
   const addSubmission = async (formData) => {
@@ -459,6 +538,36 @@ export const AppDataProvider = ({ children }) => {
   const publishSubmission = async (submissionId) => {
     // Backend handles creation of journal entry on status change
     await updateSubmissionStatus(submissionId, "PUBLISHED");
+  };
+
+  const assignReviewer = async (submissionId, reviewerId) => {
+    try {
+      const normalizedReviewerId = reviewerId === null || reviewerId === undefined || reviewerId === ""
+        ? null
+        : Number(reviewerId);
+      await authFetch(`/api/submissions/${submissionId}/assign-reviewer/`, {
+        method: "PATCH",
+        body: JSON.stringify({ reviewer_id: normalizedReviewerId }),
+      });
+      fetchSubmissions();
+    } catch (error) {
+      console.error("Error assigning reviewer:", error);
+      throw error;
+    }
+  };
+
+  const submitReviewerReport = async (submissionId, reviewPayload) => {
+    try {
+      const result = await authFetch(`/api/submissions/${submissionId}/reviewer-report/`, {
+        method: "POST",
+        body: JSON.stringify(reviewPayload),
+      });
+      fetchSubmissions();
+      return result;
+    } catch (error) {
+      console.error("Error submitting reviewer report:", error);
+      throw error;
+    }
   };
 
   const adminPublishArticle = async (formData) => {
@@ -563,18 +672,20 @@ export const AppDataProvider = ({ children }) => {
     return true;
   };
 
-  const promoteUserToEditor = async (userId) => {
+  const changeUserRole = async (userId, role) => {
     try {
-      await authFetch(`/api/users/${userId}/promote-editor/`, {
+      await authFetch(`/api/users/${userId}/role/`, {
         method: "PATCH",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ role }),
       });
-      await Promise.all([fetchUsers(), fetchEditors()]);
+      await Promise.all([fetchUsers(), fetchEditors(), fetchReviewers(), fetchSubmissions()]);
     } catch (error) {
-      console.error("Error promoting user to editor:", error);
+      console.error("Error changing user role:", error);
       throw error;
     }
   };
+
+  const promoteUserToEditor = async (userId) => changeUserRole(userId, "EDITOR");
 
   const updateEditorJournalCategory = async (editorId, mappedJournalCategory) => {
     try {
@@ -584,11 +695,15 @@ export const AppDataProvider = ({ children }) => {
           mapped_journal_category: mappedJournalCategory || null,
         }),
       });
-      await Promise.all([fetchEditors(), fetchSubmissions()]);
+      await Promise.all([fetchEditors(), fetchReviewers(), fetchSubmissions()]);
     } catch (error) {
       console.error("Error updating editor journal category:", error);
       throw error;
     }
+  };
+
+  const fetchReviewerReport = async (articleId) => {
+    return authFetch(`/api/journals/${articleId}/reviewer-report/`);
   };
 
   const uploadEditorProfileImage = useCallback(async (file) => {
@@ -647,7 +762,7 @@ export const AppDataProvider = ({ children }) => {
       profile_image: userData.profile_image || null,
       requires_profile_image:
         userData.requires_profile_image ??
-        (userData.role?.toUpperCase() === "EDITOR" && !userData.profile_image),
+        (["EDITOR", "REVIEWER"].includes(userData.role?.toUpperCase()) && !userData.profile_image),
       mapped_journal_category: userData.mapped_journal_category || userData.mappedJournalCategory || "",
     });
     return true;
@@ -672,6 +787,8 @@ export const AppDataProvider = ({ children }) => {
       console.error("Editor logout failed:", error);
     }
   };
+
+  const logoutReviewer = async () => logoutEditor();
 
   const loginUser = (user) => {
     authRequestVersionRef.current += 1;
@@ -709,14 +826,17 @@ export const AppDataProvider = ({ children }) => {
     totalJournals: journals.length,
     registeredUsers: users.length,
     activeEditors: editors.length,
-    pendingReviews: submissions.filter((s) => s.status === "Pending").length,
+    activeReviewers: reviewers.length,
+    pendingReviews: submissions.filter((s) => ["Pending", "Under Review", "Under Reviewer Review"].includes(s.status)).length,
   });
 
   const getEditorStats = (editorId) => {
     const editorSubmissions = submissions.filter((s) => Number(s.assignedTo) === Number(editorId));
     return {
       totalAssigned: editorSubmissions.length,
-      pendingReview: editorSubmissions.filter((s) => s.status === "Under Review").length,
+      pendingReview: editorSubmissions.filter((s) =>
+        ["Under Review", "Editor Completed", "Under Reviewer Review", "Reviewer Completed"].includes(s.status)
+      ).length,
       completed: editorSubmissions.filter((s) => s.status === "Completed" || s.status === "Published").length,
     };
   };
@@ -724,6 +844,7 @@ export const AppDataProvider = ({ children }) => {
   const value = {
     // Data
     editors,
+    reviewers,
     journals,
     archivedJournals,
     trendingArticles,
@@ -736,6 +857,7 @@ export const AppDataProvider = ({ children }) => {
     dashboardAnalytics,
     currentUser,
     currentEditor,
+    currentReviewer,
     isAdminLoggedIn,
     adminUser,
     isAuthChecking,
@@ -747,11 +869,15 @@ export const AppDataProvider = ({ children }) => {
     fetchRecentPublished,
     fetchSubmissions,
     promoteUserToEditor,
+    changeUserRole,
     updateEditorJournalCategory,
     uploadEditorProfileImage,
+    fetchReviewerReport,
     // Submission functions
     addSubmission,
     assignSubmission,
+    assignReviewer,
+    submitReviewerReport,
     updateSubmissionStatus,
     publishSubmission,
     adminPublishArticle,
@@ -770,6 +896,7 @@ export const AppDataProvider = ({ children }) => {
     logoutAdmin,
     loginEditor,
     logoutEditor,
+    logoutReviewer,
     loginUser,
     logoutUser,
     // Stats

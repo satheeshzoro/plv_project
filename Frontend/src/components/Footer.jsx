@@ -1,30 +1,31 @@
 import { Instagram, Twitter, MessageCircle, Linkedin, Mail } from "lucide-react";
+import { Link } from "react-router-dom";
 import logoImage from "../../assets/logo.png";
 
 const FOOTER_LINKS = {
   Explore: [
-    { label: "Articles", href: "#articles" },
-    { label: "Journals", href: "#" },
-    { label: "Authors", href: "#" },
-    { label: "Categories", href: "#" },
+    { label: "Articles", to: "/articles" },
+    { label: "Journals", to: "/journals" },
+    { label: "Authors", to: "/users" },
+    { label: "Categories", to: "/guidelines" },
   ],
   Resources: [
-    { label: "Submit Research", href: "#submit" },
-    { label: "Peer Review", href: "#" },
-    { label: "Author Guidelines", href: "#" },
-    { label: "API Access", href: "#" },
+    { label: "Submit Research", to: "/publish" },
+    { label: "Peer Review", to: "/peer-review-process" },
+    { label: "Author Guidelines", to: "/author-guidelines" },
+    { label: "API Access", to: "/contact" },
   ],
   Company: [
-    { label: "About Us", href: "#" },
-    { label: "Careers", href: "#" },
-    { label: "Contact", href: "#" },
-    { label: "Press", href: "#" },
+    { label: "About Us", to: "/about-us" },
+    { label: "Careers", to: "/contact" },
+    { label: "Contact", to: "/contact" },
+    { label: "Press", to: "/open-access" },
   ],
   Legal: [
-    { label: "Privacy Policy", href: "#" },
-    { label: "Terms of Service", href: "#" },
-    { label: "Cookie Policy", href: "#" },
-    { label: "Accessibility", href: "#" },
+    { label: "Privacy Policy", to: "/open-access" },
+    { label: "Terms of Service", to: "/guidelines" },
+    { label: "Cookie Policy", to: "/processing-fee" },
+    { label: "Accessibility", to: "/manuscript-guidelines" },
   ],
 };
 
@@ -43,17 +44,17 @@ const Footer = () => {
       <div className="container py-12 md:py-16">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-6 md:gap-12">
           <div className="col-span-2">
-            <a href="/" className="brand-logo-lockup mb-4 inline-flex">
+            <Link to="/" className="brand-logo-lockup mb-4 inline-flex">
               <span className="brand-logo-mark">
                 <img src={logoImage} alt="QuiLive logo" className="h-8 w-8 object-contain" />
               </span>
               <span>
                 <span className="block font-serif text-2xl font-semibold text-heading">QuiLive</span>
                 <span className="block text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
-                  Academic Hub
+                  Publisher's
                 </span>
               </span>
-            </a>
+            </Link>
             <p className="mb-6 max-w-xs text-sm leading-relaxed text-muted-foreground">
               Open-access publishing with one connected experience for authors, editors, and administrators.
             </p>
@@ -80,11 +81,11 @@ const Footer = () => {
             <div key={title}>
               <h4 className="mb-4 font-medium text-foreground">{title}</h4>
               <ul className="space-y-3">
-                {links.map(({ label, href }) => (
+                {links.map(({ label, to }) => (
                   <li key={label}>
-                    <a href={href} className="text-sm text-muted-foreground transition-smooth hover:text-primary">
+                    <Link to={to} className="text-sm text-muted-foreground transition-smooth hover:text-primary">
                       {label}
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>

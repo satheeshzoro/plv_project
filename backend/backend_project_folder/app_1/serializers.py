@@ -41,11 +41,19 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 
 class LoginSerializer(serializers.Serializer):
+    PORTAL_CHOICES = ["ADMIN", "EDITOR", "GENERAL"]
+
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
+    portal = serializers.ChoiceField(
+        choices=PORTAL_CHOICES,
+        required=False,
+        default="GENERAL",
+    )
 
     def validate(self, data):
         email = data["email"].strip().lower()
+        portal = (data.get("portal") or "GENERAL").upper()
         user = authenticate(
             self.context["request"],
             email=email,
@@ -58,7 +66,24 @@ class LoginSerializer(serializers.Serializer):
         if not user.is_active:
             raise serializers.ValidationError("User account is disabled")
 
+        role = (user.role or "").upper()
+        if portal == "ADMIN" and role != "ADMIN":
+            raise serializers.ValidationError(
+                "This account cannot be used on admin login. Use the correct login page."
+            )
+
+        if portal == "EDITOR" and role not in ["EDITOR", "REVIEWER"]:
+            raise serializers.ValidationError(
+                "Only editor or reviewer accounts can use this login page."
+            )
+
+        if portal == "GENERAL" and role != "USER":
+            raise serializers.ValidationError(
+                "Staff accounts must use /admin/login or /editor/login."
+            )
+
         data["email"] = email
+        data["portal"] = portal
         data["user"] = user
         return data
 
@@ -196,7 +221,7 @@ class EditorSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(url) if request else url
 
     def get_requires_profile_image(self, obj):
-        return obj.role == "EDITOR" and not bool(obj.profile_image)
+        return obj.role in ["EDITOR", "REVIEWER"] and not bool(obj.profile_image)
 
     class Meta:
         model = User
@@ -204,6 +229,7 @@ class EditorSerializer(serializers.ModelSerializer):
             "id",
             "email",
             "full_name",
+            "role",
             "pen_name",
             "country",
             "mapped_journal_category",
@@ -247,6 +273,22 @@ class EditorCreateSerializer(serializers.ModelSerializer):
         )
         return user
 
+class ReviewerCreateSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, min_length=6)
+
+    class Meta:
+        model = User
+        fields = ("email", "full_name", "pen_name", "password", "mapped_journal_category")
+
+    def create(self, validated_data):
+        password = validated_data.pop("password")
+        user = User.objects.create_user(
+            **validated_data,
+            role="REVIEWER",
+            password=password
+        )
+        return user
+
 
 class EditorCategoryMappingSerializer(serializers.ModelSerializer):
     mapped_journal_category = serializers.ChoiceField(
@@ -285,3 +327,35 @@ class EditorProfileImageUploadSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Image dimensions must be between 64x64 and 500x500 pixels.")
 
         return image_file
+
+
+class UserRoleUpdateSerializer(serializers.Serializer):
+    role = serializers.ChoiceField(choices=["USER", "EDITOR", "REVIEWER", "ADMIN"])
+    pen_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    country = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    mapped_journal_category = serializers.ChoiceField(
+        choices=Article.CATEGORY_CHOICES,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+
+
+class ReviewerAssignmentSerializer(serializers.Serializer):
+    reviewer_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class ReviewerReviewSerializer(serializers.Serializer):
+    SCORE_CHOICES = ["EXCELLENT", "GOOD", "FAIR"]
+
+    reviewer_name = serializers.CharField(required=False, allow_blank=True)
+    clarity_of_writing = serializers.ChoiceField(choices=SCORE_CHOICES)
+    relevance_to_scope = serializers.ChoiceField(choices=SCORE_CHOICES)
+    depth_of_research = serializers.ChoiceField(choices=SCORE_CHOICES)
+    discussion_of_research = serializers.ChoiceField(choices=SCORE_CHOICES)
+    use_of_references = serializers.ChoiceField(choices=SCORE_CHOICES)
+    structure_and_organization = serializers.ChoiceField(choices=SCORE_CHOICES)
+    contribution_to_field = serializers.ChoiceField(choices=SCORE_CHOICES)
+    recommend_for_publication = serializers.BooleanField()
+    comments_and_feedback = serializers.CharField()
+    reviewer_decision = serializers.CharField()

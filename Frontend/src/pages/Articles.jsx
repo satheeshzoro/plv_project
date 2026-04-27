@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAppData } from "@/context/AppDataContext";
 import { ARTICLE_TYPES, JOURNAL_OPTIONS as JOURNAL_TYPES } from "@/data/journalOptions";
 import { resolveBackendUrl } from "@/lib/api";
+import ReviewerReportModal from "@/components/ReviewerReportModal";
 
 const getFullUrl = (url) => {
   if (!url) return null;
@@ -47,7 +48,7 @@ const inferArticleType = (article) => {
 const sortByDateDesc = (articles) =>
   [...articles].sort((a, b) => new Date(b.publishedDate || 0) - new Date(a.publishedDate || 0));
 
-const DownloadList = ({ articles, onDownload, emptyMessage }) => {
+const DownloadList = ({ articles, onDownload, onViewReviewerReport, emptyMessage }) => {
   if (!articles.length) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-background p-8 text-center text-muted-foreground">
@@ -71,9 +72,6 @@ const DownloadList = ({ articles, onDownload, emptyMessage }) => {
               <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                 {article.category}
               </span>
-              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-                {article.readTime}
-              </span>
               <span className="rounded-full bg-accent/10 px-3 py-1 text-xs font-medium text-foreground">
                 {article.downloads || 0} download{article.downloads === 1 ? "" : "s"}
               </span>
@@ -84,10 +82,15 @@ const DownloadList = ({ articles, onDownload, emptyMessage }) => {
             </p>
           </div>
 
-          <Button variant="outline" onClick={() => onDownload(article)} className="md:shrink-0">
-            <Download className="mr-2 h-4 w-4" />
-            Download
-          </Button>
+          <div className="flex flex-wrap gap-2 md:shrink-0">
+            <Button variant="outline" onClick={() => onViewReviewerReport(article)}>
+              View Reviewer Report
+            </Button>
+            <Button variant="outline" onClick={() => onDownload(article)}>
+              <Download className="mr-2 h-4 w-4" />
+              Download
+            </Button>
+          </div>
         </div>
       ))}
     </div>
@@ -98,9 +101,16 @@ const Articles = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
-  const { journals, editors, currentUser, logoutUser, recordArticleDownload } = useAppData();
+  const { journals, editors, currentUser, logoutUser, recordArticleDownload, fetchReviewerReport } = useAppData();
   const [activeTab, setActiveTab] = useState("about");
   const [selectedArticleType, setSelectedArticleType] = useState("all");
+  const [reviewerReportModal, setReviewerReportModal] = useState({
+    open: false,
+    loading: false,
+    error: "",
+    report: null,
+    title: "Reviewer Report",
+  });
 
   const journalIdFromUrl = searchParams.get("journal") || "";
 
@@ -176,6 +186,40 @@ const Articles = () => {
     navigate(`${target}?${params.toString()}`);
   };
 
+  const handleViewReviewerReport = async (article) => {
+    if (!currentUser) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to view reviewer reports.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setReviewerReportModal({
+      open: true,
+      loading: true,
+      error: "",
+      report: null,
+      title: `Reviewer Report - ${article.title}`,
+    });
+
+    try {
+      const report = await fetchReviewerReport(article.id);
+      setReviewerReportModal((prev) => ({
+        ...prev,
+        loading: false,
+        report,
+      }));
+    } catch (error) {
+      setReviewerReportModal((prev) => ({
+        ...prev,
+        loading: false,
+        error: error.message || "Unable to fetch reviewer report.",
+      }));
+    }
+  };
+
   const renderTabContent = () => {
     if (!selectedJournal) return null;
 
@@ -232,6 +276,7 @@ const Articles = () => {
           <DownloadList
             articles={articlesInPress}
             onDownload={handleDownload}
+            onViewReviewerReport={handleViewReviewerReport}
             emptyMessage="No article in press data available for this journal."
           />
         </div>
@@ -434,6 +479,15 @@ const Articles = () => {
           </div>
         </section>
       </main>
+
+      <ReviewerReportModal
+        open={reviewerReportModal.open}
+        onOpenChange={(open) => setReviewerReportModal((prev) => ({ ...prev, open }))}
+        loading={reviewerReportModal.loading}
+        error={reviewerReportModal.error}
+        report={reviewerReportModal.report}
+        title={reviewerReportModal.title}
+      />
 
       <Footer />
     </div>

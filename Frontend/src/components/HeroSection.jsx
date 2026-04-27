@@ -24,20 +24,42 @@ const HeroSection = ({ submitPath = "/publish" }) => {
     let isMounted = true;
 
     const updateVisitorCount = async () => {
+      const csrfToken = localStorage.getItem("csrfToken");
       try {
+        // First try to increment and fetch in one call.
         const response = await fetch(`${BACKEND_URL}/api/site-visitors/`, {
           method: "POST",
+          headers: {
+            "X-CSRFToken": csrfToken || "",
+          },
           credentials: "include",
         });
-        if (!response.ok) {
-          throw new Error("Failed to increment visitor count");
+        if (response.ok) {
+          const data = await response.json();
+          if (isMounted) {
+            setViewerCount(data.count ?? null);
+          }
+          return;
         }
-        const data = await response.json();
+
+        // If POST fails (for example CSRF/session state), fallback to read-only GET
+        // so the viewer count remains visible.
+        const fallback = await fetch(`${BACKEND_URL}/api/site-visitors/`, {
+          method: "GET",
+          credentials: "include",
+        });
+        if (!fallback.ok) {
+          throw new Error("Failed to fetch visitor count");
+        }
+        const fallbackData = await fallback.json();
         if (isMounted) {
-          setViewerCount(data.count ?? null);
+          setViewerCount(fallbackData.count ?? 0);
         }
       } catch (error) {
         console.error("Failed to update visitor count:", error);
+        if (isMounted) {
+          setViewerCount(0);
+        }
       }
     };
 
